@@ -152,6 +152,72 @@ class AuthController extends Controller
     }
 
     /**
+     * Initialize or retrieve a guest account by device ID.
+     */
+    public function guestInit(Request $request): JsonResponse
+    {
+        $request->validate([
+            'device_id' => ['required', 'string', 'max:255'],
+        ]);
+
+        $deviceId = $request->input('device_id');
+
+        // Look for existing guest account with this device
+        $user = User::where('device_id', $deviceId)
+            ->where('email', 'like', 'guest_%@sinemani.app')
+            ->first();
+
+        if ($user) {
+            if (!$user->is_active) {
+                return $this->error('Your account has been suspended.', 403);
+            }
+
+            // Revoke old tokens and issue a fresh one
+            $user->tokens()->delete();
+            $token = $user->createToken('mobile')->plainTextToken;
+
+            return $this->success([
+                'user' => $this->formatUser($user),
+                'token' => $token,
+                'is_new' => false,
+            ], 'Guest session restored');
+        }
+
+        // Create a new guest account tied to this device
+        $guestId = substr(str_replace(['+', '/', '='], '', base64_encode(random_bytes(8))), 0, 10);
+        $guestEmail = "guest_{$guestId}@sinemani.app";
+
+        $user = User::create([
+            'name' => 'Viewer ' . substr($guestId, 0, 5),
+            'email' => $guestEmail,
+            'password' => bcrypt(bin2hex(random_bytes(16))),
+            'device_id' => $deviceId,
+        ]);
+
+        $user->assignRole('user');
+
+        // Grant signup bonus
+        $signupBonus = (int) config('dramabox.signup_bonus_coins', 50);
+        if ($signupBonus > 0) {
+            $this->coinService->credit(
+                $user,
+                $signupBonus,
+                'signup_bonus',
+                'Welcome bonus coins!'
+            );
+            $user->refresh();
+        }
+
+        $token = $user->createToken('mobile')->plainTextToken;
+
+        return $this->created([
+            'user' => $this->formatUser($user),
+            'token' => $token,
+            'is_new' => true,
+        ], 'Guest account created');
+    }
+
+    /**
      * Logout (revoke current token).
      */
     public function logout(Request $request): JsonResponse

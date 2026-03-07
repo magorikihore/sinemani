@@ -42,6 +42,8 @@ Route::prefix('v1')->middleware('throttle:10,1')->group(function () {
 
 // ── Public Auth Routes ─────────────────────────────────────────────
 Route::prefix('auth')->group(function () {
+    Route::post('guest/init', [AuthController::class, 'guestInit'])
+        ->middleware('throttle:10,1');
     Route::post('register', [AuthController::class, 'register'])
         ->middleware('throttle:5,1');
     Route::post('login', [AuthController::class, 'login'])
