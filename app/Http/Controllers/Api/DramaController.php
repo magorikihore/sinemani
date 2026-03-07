@@ -78,7 +78,14 @@ class DramaController extends Controller
             $q->published()->orderBy('season_number')->orderBy('episode_number');
         }]);
 
-        $user = $request->user();
+        // Resolve user from Bearer token even on public route
+        $user = $request->user() ?? $request->user('sanctum');
+        if (!$user && $request->bearerToken()) {
+            $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
+            if ($token) {
+                $user = $token->tokenable;
+            }
+        }
         $data = $drama->toArray();
 
         // Add user-specific data if authenticated
@@ -93,7 +100,7 @@ class DramaController extends Controller
                 ->pluck('episode_id')
                 ->toArray();
 
-            $data['episodes'] = $drama->episodes->map(function ($episode) use ($unlockedEpisodeIds, $user) {
+            $data['episodes'] = $drama->episodes->map(function ($episode) use ($unlockedEpisodeIds, $user, $drama) {
                 $ep = $episode->toArray();
                 $ep['is_unlocked'] = $episode->is_free || $drama->is_free || $user->isVipActive()
                     || in_array($episode->id, $unlockedEpisodeIds);
