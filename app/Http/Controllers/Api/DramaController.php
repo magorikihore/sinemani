@@ -102,8 +102,23 @@ class DramaController extends Controller
 
             $data['episodes'] = $drama->episodes->map(function ($episode) use ($unlockedEpisodeIds, $user, $drama) {
                 $ep = $episode->toArray();
-                $ep['is_unlocked'] = $episode->is_free || $drama->is_free || $user->isVipActive()
+                $isUnlocked = $episode->is_free || $drama->is_free || $user->isVipActive()
                     || in_array($episode->id, $unlockedEpisodeIds);
+                $ep['is_unlocked'] = $isUnlocked;
+                // Don't expose video URLs for locked episodes
+                if (!$isUnlocked) {
+                    unset($ep['video_url'], $ep['video_path'], $ep['hls_url']);
+                }
+                return $ep;
+            });
+        } else {
+            // No auth — strip video URLs from non-free episodes
+            $data['episodes'] = $drama->episodes->map(function ($episode) {
+                $ep = $episode->toArray();
+                $ep['is_unlocked'] = $episode->is_free;
+                if (!$episode->is_free) {
+                    unset($ep['video_url'], $ep['video_path'], $ep['hls_url']);
+                }
                 return $ep;
             });
         }
