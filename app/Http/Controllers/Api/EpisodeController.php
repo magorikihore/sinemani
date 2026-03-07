@@ -26,8 +26,14 @@ class EpisodeController extends Controller
         }
 
         $episode->load('drama');
-        // Attempt to resolve user from Bearer token even on public route
-        $user = auth('sanctum')->user();
+        // Resolve user from Bearer token even on public route
+        $user = $request->user() ?? $request->user('sanctum');
+        if (!$user && $request->bearerToken()) {
+            $token = \Laravel\Sanctum\PersonalAccessToken::findToken($request->bearerToken());
+            if ($token) {
+                $user = $token->tokenable;
+            }
+        }
 
         $data = $episode->toArray();
         $data['drama_title'] = $episode->drama->title;
