@@ -156,6 +156,18 @@ class DramaController extends Controller
     {
         $banners = Banner::active()->orderBy('sort_order')->get();
 
+        // Populate banner images from linked drama if banner has no image
+        $dramaIds = $banners->where('link_type', 'drama')->pluck('link_value')->filter()->map(fn($v) => (int) $v);
+        $dramaImages = Drama::whereIn('id', $dramaIds)->pluck('banner_image', 'id');
+        $dramaCoverImages = Drama::whereIn('id', $dramaIds)->pluck('cover_image', 'id');
+        $banners->transform(function ($banner) use ($dramaImages, $dramaCoverImages) {
+            if (empty($banner->image) && $banner->link_type === 'drama') {
+                $did = (int) $banner->link_value;
+                $banner->image = $dramaImages[$did] ?? $dramaCoverImages[$did] ?? '';
+            }
+            return $banner;
+        });
+
         $featured = Drama::published()->featured()
             ->with('category')->orderByDesc('sort_order')->limit(10)->get();
 

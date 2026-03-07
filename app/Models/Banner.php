@@ -39,4 +39,12 @@ class Banner extends Model
                 $q->whereNull('ends_at')->orWhere('ends_at', '>=', now());
             });
     }
+
+    /**
+     * Get the linked drama (if link_type is 'drama').
+     */
+    public function drama()
+    {
+        return $this->belongsTo(Drama::class, 'link_value');
+    }
 }
