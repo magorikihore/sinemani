@@ -21,7 +21,7 @@ class DramaManagementController extends Controller
         $query = Drama::with(['category', 'tags']);
 
         if ($search = $request->input('search')) {
-            $query->where('title', 'ilike', "%{$search}%");
+            $query->where('title', 'like', "%{$search}%");
         }
 
         if ($status = $request->input('status')) {

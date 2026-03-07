@@ -20,9 +20,9 @@ class DramaController extends Controller
         // Search
         if ($search = $request->input('search')) {
             $query->where(function ($q) use ($search) {
-                $q->where('title', 'ilike', "%{$search}%")
-                  ->orWhere('synopsis', 'ilike', "%{$search}%")
-                  ->orWhere('director', 'ilike', "%{$search}%");
+                $q->where('title', 'like', "%{$search}%")
+                  ->orWhere('synopsis', 'like', "%{$search}%")
+                  ->orWhere('director', 'like', "%{$search}%");
             });
         }
 
