@@ -137,12 +137,12 @@
         </div>
 
         <div class="flex items-center justify-between">
-            <form method="POST" action="{{ route('admin.episodes.destroy', [$drama, $episode]) }}" x-data
-                @submit.prevent="if(confirm('Delete this episode? This cannot be undone.')) $el.submit()">
-                @csrf
-                @method('DELETE')
-                <button type="submit" class="text-sm font-semibold text-red-600 hover:text-red-800">Delete Episode</button>
-            </form>
+            <div>
+                <button type="button" class="text-sm font-semibold text-red-600 hover:text-red-800"
+                    onclick="if(confirm('Delete this episode? This cannot be undone.')) document.getElementById('delete-episode-form').submit()">
+                    Delete Episode
+                </button>
+            </div>
             <div class="flex items-center gap-4">
                 <a href="{{ route('admin.dramas.show', $drama) }}" class="text-sm font-semibold text-gray-700 hover:text-gray-900">Cancel</a>
                 <button type="submit" class="rounded-md bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-500">
@@ -150,6 +150,12 @@
                 </button>
             </div>
         </div>
+    </form>
+
+    {{-- Separate delete form (outside the edit form to avoid nesting) --}}
+    <form id="delete-episode-form" method="POST" action="{{ route('admin.episodes.destroy', [$drama, $episode]) }}" class="hidden">
+        @csrf
+        @method('DELETE')
     </form>
 </div>
 @endsection

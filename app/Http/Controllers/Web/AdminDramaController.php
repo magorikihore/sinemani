@@ -166,6 +166,8 @@ class AdminDramaController extends Controller
                 Storage::disk('public')->delete($drama->cover_image);
             }
             $data['cover_image'] = $request->file('cover_image')->store('dramas/covers', 'public');
+        } else {
+            unset($data['cover_image']);
         }
 
         if ($request->hasFile('banner_image')) {
@@ -173,6 +175,8 @@ class AdminDramaController extends Controller
                 Storage::disk('public')->delete($drama->banner_image);
             }
             $data['banner_image'] = $request->file('banner_image')->store('dramas/banners', 'public');
+        } else {
+            unset($data['banner_image']);
         }
 
         if (isset($data['status']) && $data['status'] === 'published' && !$drama->published_at) {

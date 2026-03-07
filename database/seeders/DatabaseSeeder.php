@@ -68,5 +68,8 @@ class DatabaseSeeder extends Seeder
 
         // Seed default data
         $this->call(DefaultDataSeeder::class);
+
+        // Seed sample dramas, episodes & banners
+        $this->call(SampleDataSeeder::class);
     }
 }
