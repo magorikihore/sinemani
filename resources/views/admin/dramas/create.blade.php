@@ -65,7 +65,7 @@
                             class="mt-1 block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 sm:text-sm">
                             <option value="">None</option>
                             @foreach(['G','PG','PG-13','R','NC-17'] as $r)
-                                <option value="{{ $r }}" {{ old('content_rating') === $r ? 'selected' : '' }}>{{ $r }}</option>
+                                <option value="{{ $r }}" {{ old('content_rating', 'PG-13') === $r ? 'selected' : '' }}>{{ $r }}</option>
                             @endforeach
                         </select>
                     </div>

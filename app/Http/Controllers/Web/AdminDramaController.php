@@ -69,6 +69,7 @@ class AdminDramaController extends Controller
         ]);
 
         $data['slug'] = Str::slug($data['title']) . '-' . Str::random(6);
+        $data['content_rating'] = $data['content_rating'] ?? 'PG-13';
         $data['is_featured'] = $request->boolean('is_featured');
         $data['is_trending'] = $request->boolean('is_trending');
         $data['is_new_release'] = $request->boolean('is_new_release');
@@ -148,6 +149,7 @@ class AdminDramaController extends Controller
             'tags.*' => ['exists:tags,id'],
         ]);
 
+        $data['content_rating'] = $data['content_rating'] ?? $drama->content_rating ?? 'PG-13';
         $data['is_featured'] = $request->boolean('is_featured');
         $data['is_trending'] = $request->boolean('is_trending');
         $data['is_new_release'] = $request->boolean('is_new_release');
