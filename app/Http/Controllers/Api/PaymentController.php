@@ -263,7 +263,15 @@ class PaymentController extends Controller
      */
     public function callback(Request $request): JsonResponse
     {
-        Log::info('MobilePayment callback received', $request->all());
+        Log::info('MobilePayment callback received', [
+            'payload' => $request->all(),
+            'ip' => $request->ip(),
+            'signature_headers' => array_filter([
+                'X-Signature' => $request->header('X-Signature'),
+                'X-Webhook-Signature' => $request->header('X-Webhook-Signature'),
+                'X-Payin-Signature' => $request->header('X-Payin-Signature'),
+            ]),
+        ]);
 
         // Verify webhook signature if configured
         if (!$this->paymentService->verifyWebhookSignature($request)) {

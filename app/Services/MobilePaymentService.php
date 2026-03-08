@@ -144,18 +144,12 @@ class MobilePaymentService
     /**
      * Verify webhook signature from payment gateway.
      *
-     * Checks HMAC-SHA256 signature sent in the X-Signature header.
-     * Also validates source IP if PAYMENT_GATEWAY_IPS is configured.
+     * Supports multiple signature header formats used by payment gateways.
+     * Falls back to reference-based verification if no signature header is present.
      */
     public function verifyWebhookSignature(\Illuminate\Http\Request $request): bool
     {
         $secret = $this->getGatewayConfig('payment_gateway_api_secret');
-
-        // If no secret is configured, skip verification (dev/testing mode)
-        if (empty($secret)) {
-            Log::warning('MobilePayment: Webhook signature verification skipped — no API secret configured');
-            return true;
-        }
 
         // Check IP whitelist if configured
         $allowedIps = $this->getGatewayConfig('payment_gateway_allowed_ips');
@@ -167,17 +161,48 @@ class MobilePaymentService
             }
         }
 
-        // Verify HMAC-SHA256 signature
-        $signature = $request->header('X-Signature') ?? $request->header('X-Webhook-Signature');
-        if (empty($signature)) {
-            Log::warning('MobilePayment: No webhook signature header found');
+        // Try to verify HMAC signature if a signature header is present
+        $signature = $request->header('X-Signature')
+            ?? $request->header('X-Webhook-Signature')
+            ?? $request->header('X-Payin-Signature');
+
+        if (!empty($signature) && !empty($secret)) {
+            $payload = $request->getContent();
+            $expected = hash_hmac('sha256', $payload, $secret);
+
+            if (hash_equals($expected, $signature)) {
+                return true;
+            }
+
+            Log::warning('MobilePayment: Webhook signature mismatch', [
+                'ip' => $request->ip(),
+                'header' => $signature,
+            ]);
             return false;
         }
 
-        $payload = $request->getContent();
-        $expected = hash_hmac('sha256', $payload, $secret);
+        // No signature header — verify by checking that the reference exists in our DB
+        $reference = $request->input('reference') ?? $request->input('request_ref');
+        if (empty($reference)) {
+            Log::warning('MobilePayment: Callback without signature or reference', [
+                'ip' => $request->ip(),
+            ]);
+            return false;
+        }
 
-        return hash_equals($expected, $signature);
+        $exists = MobilePayment::where('reference', $reference)
+            ->orWhere('gateway_reference', $reference)
+            ->exists();
+
+        if (!$exists) {
+            Log::warning('MobilePayment: Callback for unknown reference', [
+                'reference' => $reference,
+                'ip' => $request->ip(),
+            ]);
+            return false;
+        }
+
+        return true;
     }
 
     /**
