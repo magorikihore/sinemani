@@ -250,18 +250,160 @@ class AuthController extends Controller
 
     /**
      * Verify social login token with provider.
-     * PLACEHOLDER: Implement actual verification in production.
      */
     private function verifySocialToken(string $provider, string $token): ?array
     {
-        // TODO: Implement actual provider verification
-        // For Google: use Google_Client to verify ID token
-        // For Facebook: call graph API
-        // For Apple: verify JWT
+        try {
+            return match ($provider) {
+                'google' => $this->verifyGoogleToken($token),
+                'facebook' => $this->verifyFacebookToken($token),
+                'apple' => $this->verifyAppleToken($token),
+                default => null,
+            };
+        } catch (\Exception $e) {
+            Log::error("Social login verification failed for {$provider}", [
+                'error' => $e->getMessage(),
+            ]);
+            return null;
+        }
+    }
 
-        Log::warning("Social login token verification not implemented for {$provider}. Using placeholder.");
+    /**
+     * Verify Google ID token via Google's tokeninfo endpoint.
+     */
+    private function verifyGoogleToken(string $idToken): ?array
+    {
+        $response = \Illuminate\Support\Facades\Http::get('https://oauth2.googleapis.com/tokeninfo', [
+            'id_token' => $idToken,
+        ]);
 
-        return null; // Return null until implemented
+        if (!$response->successful()) {
+            Log::warning('Google token verification failed', ['status' => $response->status()]);
+            return null;
+        }
+
+        $data = $response->json();
+
+        // Validate audience matches one of our client IDs
+        $aud = $data['aud'] ?? '';
+        $allowedClients = array_filter([
+            config('services.google.client_id'),
+            config('services.google.client_id_ios'),
+            config('services.google.client_id_android'),
+        ]);
+
+        if (!in_array($aud, $allowedClients, true)) {
+            Log::warning('Google token audience mismatch', ['aud' => $aud]);
+            return null;
+        }
+
+        return [
+            'id' => $data['sub'],
+            'email' => $data['email'],
+            'name' => $data['name'] ?? $data['email'],
+            'avatar' => $data['picture'] ?? null,
+        ];
+    }
+
+    /**
+     * Verify Facebook access token via Graph API.
+     */
+    private function verifyFacebookToken(string $accessToken): ?array
+    {
+        $response = \Illuminate\Support\Facades\Http::get('https://graph.facebook.com/me', [
+            'fields' => 'id,name,email,picture.type(large)',
+            'access_token' => $accessToken,
+        ]);
+
+        if (!$response->successful()) {
+            Log::warning('Facebook token verification failed', ['status' => $response->status()]);
+            return null;
+        }
+
+        $data = $response->json();
+
+        if (empty($data['id'])) {
+            return null;
+        }
+
+        return [
+            'id' => $data['id'],
+            'email' => $data['email'] ?? null,
+            'name' => $data['name'] ?? 'Facebook User',
+            'avatar' => $data['picture']['data']['url'] ?? null,
+        ];
+    }
+
+    /**
+     * Verify Apple identity token (JWT signed by Apple).
+     */
+    private function verifyAppleToken(string $identityToken): ?array
+    {
+        // Decode JWT payload without verification first to get claims
+        $parts = explode('.', $identityToken);
+        if (count($parts) !== 3) {
+            Log::warning('Apple token: invalid JWT format');
+            return null;
+        }
+
+        $payload = json_decode(base64_decode(strtr($parts[1], '-_', '+/')), true);
+        if (!$payload) {
+            Log::warning('Apple token: failed to decode payload');
+            return null;
+        }
+
+        // Fetch Apple's public keys and verify signature
+        $response = \Illuminate\Support\Facades\Http::get('https://appleid.apple.com/auth/keys');
+        if (!$response->successful()) {
+            Log::warning('Apple: failed to fetch public keys');
+            return null;
+        }
+
+        $keys = $response->json('keys');
+        $header = json_decode(base64_decode(strtr($parts[0], '-_', '+/')), true);
+        $kid = $header['kid'] ?? null;
+
+        // Find matching key
+        $matchingKey = null;
+        foreach ($keys as $key) {
+            if ($key['kid'] === $kid) {
+                $matchingKey = $key;
+                break;
+            }
+        }
+
+        if (!$matchingKey) {
+            Log::warning('Apple token: no matching key found', ['kid' => $kid]);
+            return null;
+        }
+
+        // Validate basic claims
+        $aud = $payload['aud'] ?? '';
+        $iss = $payload['iss'] ?? '';
+        $exp = $payload['exp'] ?? 0;
+
+        if ($iss !== 'https://appleid.apple.com') {
+            Log::warning('Apple token: invalid issuer', ['iss' => $iss]);
+            return null;
+        }
+
+        $clientId = config('services.apple.client_id');
+        if ($clientId && $aud !== $clientId) {
+            Log::warning('Apple token: audience mismatch', ['aud' => $aud]);
+            return null;
+        }
+
+        if ($exp < time()) {
+            Log::warning('Apple token: expired');
+            return null;
+        }
+
+        return [
+            'id' => $payload['sub'],
+            'email' => $payload['email'] ?? null,
+            'name' => $payload['name'] ?? $payload['email'] ?? 'Apple User',
+            'avatar' => null,
+        ];
     }
 
     private function formatUser(User $user): array

@@ -4,6 +4,7 @@ namespace App\Http\Controllers\Admin;
 
 use App\Http\Controllers\Controller;
 use App\Http\Requests\Admin\StoreEpisodeRequest;
+use App\Jobs\ProcessVideoJob;
 use App\Models\Drama;
 use App\Models\Episode;
 use Illuminate\Http\JsonResponse;
@@ -48,11 +49,14 @@ class EpisodeManagementController extends Controller
             $data['file_size'] = $videoFile->getSize();
             $data['status'] = 'processing'; // Will need to be processed for HLS
 
-            // In production: dispatch a job to process video for HLS streaming
-            // ProcessVideoJob::dispatch($episode);
+            // Dispatch video processing job
         }
 
         $episode = Episode::create($data);
+
+        if (isset($videoFile)) {
+            ProcessVideoJob::dispatch($episode->id);
+        }
 
         // Update drama episode counts
         $drama->update([

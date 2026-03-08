@@ -35,4 +35,19 @@ return [
         ],
     ],
 
+    'google' => [
+        'client_id' => env('GOOGLE_CLIENT_ID'),
+        'client_id_ios' => env('GOOGLE_CLIENT_ID_IOS'),
+        'client_id_android' => env('GOOGLE_CLIENT_ID_ANDROID'),
+    ],
+
+    'facebook' => [
+        'app_id' => env('FACEBOOK_APP_ID'),
+        'app_secret' => env('FACEBOOK_APP_SECRET'),
+    ],
+
+    'apple' => [
+        'client_id' => env('APPLE_CLIENT_ID'),
+    ],
+
 ];

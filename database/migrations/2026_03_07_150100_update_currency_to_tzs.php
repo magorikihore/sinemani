@@ -1,24 +1,34 @@
 <?php
 
 use Illuminate\Database\Migrations\Migration;
+use Illuminate\Database\Schema\Blueprint;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Schema;
 
 return new class extends Migration
 {
     public function up(): void
     {
+        $driver = Schema::getConnection()->getDriverName();
+
         // Update coin_packages currency default and existing rows
         DB::table('coin_packages')->update(['currency' => 'TZS']);
-        DB::statement("ALTER TABLE coin_packages ALTER COLUMN currency SET DEFAULT 'TZS'");
+        if ($driver !== 'sqlite') {
+            DB::statement("ALTER TABLE coin_packages ALTER COLUMN currency SET DEFAULT 'TZS'");
+        }
 
         // Update subscription_plans currency default and existing rows
         DB::table('subscription_plans')->update(['currency' => 'TZS']);
 
         // Update purchases currency default
-        DB::statement("ALTER TABLE purchases ALTER COLUMN currency SET DEFAULT 'TZS'");
+        if ($driver !== 'sqlite') {
+            DB::statement("ALTER TABLE purchases ALTER COLUMN currency SET DEFAULT 'TZS'");
+        }
 
         // Update subscriptions currency default
-        DB::statement("ALTER TABLE subscriptions ALTER COLUMN currency SET DEFAULT 'TZS'");
+        if ($driver !== 'sqlite') {
+            DB::statement("ALTER TABLE subscriptions ALTER COLUMN currency SET DEFAULT 'TZS'");
+        }
 
         // Update coin_packages prices to TZS equivalents
         // Starter Pack: $0.99 → 2,500 TZS

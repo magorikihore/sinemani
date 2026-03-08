@@ -6,6 +6,8 @@ use App\Models\Subscription;
 use App\Models\SubscriptionPlan;
 use App\Models\User;
 use Illuminate\Support\Facades\DB;
+use Illuminate\Support\Facades\Http;
+use Illuminate\Support\Facades\Log;
 use Illuminate\Support\Str;
 
 class SubscriptionService
@@ -121,7 +123,6 @@ class SubscriptionService
 
     /**
      * Verify and process a store receipt (Apple/Google).
-     * Placeholder — integrate with actual store APIs.
      */
     public function verifyStoreReceipt(
         User $user,
@@ -134,16 +135,199 @@ class SubscriptionService
             ->active()
             ->firstOrFail();
 
-        // TODO: Verify receipt with Apple/Google
-        // For now, trust the receipt and create subscription
+        // Verify receipt with respective store
+        $verification = match ($provider) {
+            'apple' => $this->verifyAppleReceipt($receipt, $productId),
+            'google' => $this->verifyGoogleReceipt($receipt, $productId),
+            default => throw new \InvalidArgumentException("Unsupported provider: {$provider}"),
+        };
+
+        if (!$verification['valid']) {
+            throw new \RuntimeException($verification['error'] ?? 'Receipt verification failed');
+        }
+
         return $this->subscribe(
             $user,
             $plan,
             $provider,
-            null,
+            $verification['transaction_id'] ?? null,
             $receipt,
-            ['receipt' => $receipt, 'product_id' => $productId],
+            [
+                'receipt' => substr($receipt, 0, 100) . '...',
+                'product_id' => $productId,
+                'store_verified' => true,
+                'verification_time' => now()->toISOString(),
+            ],
         );
+    }
+
+    /**
+     * Verify Apple App Store receipt.
+     */
+    private function verifyAppleReceipt(string $receipt, string $productId): array
+    {
+        $sharedSecret = config('services.apple.shared_secret', '');
+
+        $payload = [
+            'receipt-data' => $receipt,
+            'password' => $sharedSecret,
+            'exclude-old-transactions' => true,
+        ];
+
+        // Try production first, then sandbox
+        $urls = [
+            'https://buy.itunes.apple.com/verifyReceipt',
+            'https://sandbox.itunes.apple.com/verifyReceipt',
+        ];
+
+        foreach ($urls as $url) {
+            try {
+                $response = Http::timeout(30)->post($url, $payload);
+
+                if (!$response->successful()) {
+                    continue;
+                }
+
+                $data = $response->json();
+                $status = $data['status'] ?? -1;
+
+                // Status 21007 means sandbox receipt sent to production — retry with sandbox
+                if ($status === 21007) {
+                    continue;
+                }
+
+                if ($status !== 0) {
+                    Log::warning('Apple receipt verification failed', ['status' => $status]);
+                    return ['valid' => false, 'error' => "Apple verification status: {$status}"];
+                }
+
+                // Find matching in-app purchase
+                $latestReceipt = $data['latest_receipt_info'] ?? $data['receipt']['in_app'] ?? [];
+                $matchingPurchase = null;
+
+                foreach ($latestReceipt as $purchase) {
+                    if (($purchase['product_id'] ?? '') === $productId) {
+                        $matchingPurchase = $purchase;
+                        break;
+                    }
+                }
+
+                if (!$matchingPurchase) {
+                    return ['valid' => false, 'error' => 'Product not found in receipt'];
+                }
+
+                return [
+                    'valid' => true,
+                    'transaction_id' => $matchingPurchase['transaction_id'] ?? null,
+                    'product_id' => $productId,
+                ];
+            } catch (\Exception $e) {
+                Log::error('Apple receipt verification error', ['url' => $url, 'error' => $e->getMessage()]);
+                continue;
+            }
+        }
+
+        return ['valid' => false, 'error' => 'Could not verify receipt with Apple'];
+    }
+
+    /**
+     * Verify Google Play receipt via Google Play Developer API.
+     */
+    private function verifyGoogleReceipt(string $purchaseToken, string $productId): array
+    {
+        $packageName = config('services.google.play_package_name', '');
+        $serviceAccountKey = config('services.google.play_service_account_key', '');
+
+        if (empty($packageName) || empty($serviceAccountKey)) {
+            Log::error('Google Play verification: missing configuration');
+            return ['valid' => false, 'error' => 'Google Play verification not configured'];
+        }
+
+        try {
+            // Get access token from service account
+            $accessToken = $this->getGoogleAccessToken($serviceAccountKey);
+
+            if (!$accessToken) {
+                return ['valid' => false, 'error' => 'Failed to obtain Google access token'];
+            }
+
+            $url = "https://androidpublisher.googleapis.com/androidpublisher/v3/applications/{$packageName}/purchases/subscriptions/{$productId}/tokens/{$purchaseToken}";
+
+            $response = Http::withToken($accessToken)
+                ->timeout(30)
+                ->get($url);
+
+            if (!$response->successful()) {
+                Log::warning('Google Play verification failed', [
+                    'status' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+                return ['valid' => false, 'error' => 'Google Play verification failed'];
+            }
+
+            $data = $response->json();
+
+            // Check payment state (0=pending, 1=received, 2=trial, 3=deferred)
+            $paymentState = $data['paymentState'] ?? -1;
+            if (!in_array($paymentState, [1, 2], true)) {
+                return ['valid' => false, 'error' => "Invalid payment state: {$paymentState}"];
+            }
+
+            return [
+                'valid' => true,
+                'transaction_id' => $data['orderId'] ?? null,
+                'product_id' => $productId,
+            ];
+        } catch (\Exception $e) {
+            Log::error('Google Play verification error', ['error' => $e->getMessage()]);
+            return ['valid' => false, 'error' => 'Google Play verification error'];
+        }
+    }
+
+    /**
+     * Get Google OAuth2 access token from service account credentials.
+     */
+    private function getGoogleAccessToken(string $serviceAccountKeyPath): ?string
+    {
+        try {
+            if (!file_exists($serviceAccountKeyPath)) {
+                Log::error('Google service account key file not found', ['path' => $serviceAccountKeyPath]);
+                return null;
+            }
+
+            $keyData = json_decode(file_get_contents($serviceAccountKeyPath), true);
+
+            $header = base64_encode(json_encode(['alg' => 'RS256', 'typ' => 'JWT']));
+            $now = time();
+            $claims = base64_encode(json_encode([
+                'iss' => $keyData['client_email'],
+                'scope' => 'https://www.googleapis.com/auth/androidpublisher',
+                'aud' => 'https://oauth2.googleapis.com/token',
+                'iat' => $now,
+                'exp' => $now + 3600,
+            ]));
+
+            $signatureInput = "{$header}.{$claims}";
+            $privateKey = openssl_pkey_get_private($keyData['private_key']);
+            openssl_sign($signatureInput, $signature, $privateKey, OPENSSL_ALGO_SHA256);
+
+            $jwt = "{$signatureInput}." . base64_encode($signature);
+
+            $response = Http::asForm()->post('https://oauth2.googleapis.com/token', [
+                'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
+                'assertion' => $jwt,
+            ]);
+
+            if ($response->successful()) {
+                return $response->json('access_token');
+            }
+
+            Log::error('Google OAuth token exchange failed', ['body' => $response->body()]);
+            return null;
+        } catch (\Exception $e) {
+            Log::error('Google OAuth error', ['error' => $e->getMessage()]);
+            return null;
+        }
     }
 
     /**

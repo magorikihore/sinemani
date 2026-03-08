@@ -27,6 +27,7 @@ return new class extends Migration
                 'vip_reward',     // VIP daily bonus
                 'ad_reward',      // watched ad
                 'signup_bonus',   // new user bonus
+                'subscription',   // subscription bonus
             ]);
             $table->string('description')->nullable();
             $table->morphs('transactionable'); // polymorphic relation
