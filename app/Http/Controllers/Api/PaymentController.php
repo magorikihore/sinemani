@@ -109,6 +109,10 @@ class PaymentController extends Controller
                 payableId: $package->id,
             );
 
+            if ($payment->status === 'failed') {
+                return $this->error($payment->failure_reason ?? 'Payment gateway rejected the request.', 422);
+            }
+
             $response = [
                 'payment' => $this->formatPayment($payment),
                 'message' => 'USSD push sent to your phone. Please complete the payment.',
@@ -165,6 +169,10 @@ class PaymentController extends Controller
                 paymentType: 'subscription',
                 payableId: $plan->id,
             );
+
+            if ($payment->status === 'failed') {
+                return $this->error($payment->failure_reason ?? 'Payment gateway rejected the request.', 422);
+            }
 
             $response = [
                 'payment' => $this->formatPayment($payment),
