@@ -228,9 +228,16 @@ class MobilePaymentService
         $reference = $data['reference'] ?? null;
 
         // Find payment by gateway reference or internal reference
-        $payment = MobilePayment::where('gateway_reference', $requestRef)
-            ->orWhere('reference', $reference)
-            ->first();
+        // Only query by non-null values to avoid matching all NULL gateway_reference records
+        $payment = null;
+
+        if ($requestRef) {
+            $payment = MobilePayment::where('gateway_reference', $requestRef)->first();
+        }
+
+        if (!$payment && $reference) {
+            $payment = MobilePayment::where('reference', $reference)->first();
+        }
 
         if (!$payment) {
             Log::warning('MobilePayment: Callback for unknown payment', $data);
@@ -244,13 +251,13 @@ class MobilePaymentService
 
         $status = strtolower($data['status'] ?? 'failed');
 
-        if ($status === 'completed') {
+        if (in_array($status, ['completed', 'success', 'successful'])) {
             return $this->processSuccessfulPayment($payment, $data);
         }
 
         // Failed / cancelled / expired
         $payment->markFailed(
-            $data['failure_reason'] ?? "Payment {$status}",
+            $data['failure_reason'] ?? $data['status_message'] ?? $data['message'] ?? "Payment {$status}",
             $data
         );
 
@@ -263,7 +270,10 @@ class MobilePaymentService
     protected function processSuccessfulPayment(MobilePayment $payment, array $callbackData): MobilePayment
     {
         return DB::transaction(function () use ($payment, $callbackData) {
-            $operatorRef = $callbackData['operator_ref'] ?? '';
+            $operatorRef = $callbackData['operator_ref']
+                ?? $callbackData['transaction_id']
+                ?? $callbackData['operator_transaction_id']
+                ?? '';
             $payment->markCompleted($operatorRef, $callbackData);
 
             $user = $payment->user;
