@@ -55,6 +55,18 @@ class SubscriptionController extends Controller
         $user = $request->user();
         $plan = SubscriptionPlan::active()->findOrFail($request->plan_id);
 
+        // Prevent duplicate subscription purchase
+        if ($this->subscriptionService->hasActiveSubscription($user)) {
+            $active = $this->subscriptionService->getActiveSubscription($user);
+            $daysRemaining = (int) now()->diffInDays($active->ends_at, false);
+            return $this->error(
+                "You already have an active subscription ({$active->plan->name}) with {$daysRemaining} days remaining. Please wait for it to expire or cancel it first.",
+                422,
+                null,
+                'SUBSCRIPTION_ALREADY_ACTIVE'
+            );
+        }
+
         // For store purchases, verify receipt
         if (in_array($request->payment_provider, ['apple', 'google']) && $request->receipt) {
             $subscription = $this->subscriptionService->verifyStoreReceipt(

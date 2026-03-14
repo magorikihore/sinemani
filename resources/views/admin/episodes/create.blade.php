@@ -6,8 +6,9 @@
 @endsection
 
 @section('content')
-<div class="mx-auto max-w-3xl">
-    <form method="POST" action="{{ route('admin.episodes.store', $drama) }}" enctype="multipart/form-data" class="space-y-6">
+<div class="mx-auto max-w-3xl" x-data="episodeUpload()">
+    <form method="POST" action="{{ route('admin.episodes.store', $drama) }}" enctype="multipart/form-data" class="space-y-6"
+        @submit.prevent="submitForm($event)">
         @csrf
 
         <div class="bg-white shadow rounded-lg">
@@ -122,12 +123,96 @@
             </div>
         </div>
 
+        {{-- Upload Progress --}}
+        <div x-show="uploading" x-cloak class="bg-white shadow rounded-lg">
+            <div class="px-4 py-5 sm:p-6">
+                <div class="flex items-center justify-between mb-2">
+                    <span class="text-sm font-medium text-gray-700">Uploading...</span>
+                    <span class="text-sm font-semibold text-brand-600" x-text="progress + '%'"></span>
+                </div>
+                <div class="w-full bg-gray-200 rounded-full h-3 overflow-hidden">
+                    <div class="bg-brand-600 h-3 rounded-full transition-all duration-300 ease-out"
+                        :style="'width: ' + progress + '%'"></div>
+                </div>
+                <p class="mt-2 text-xs text-gray-500" x-text="statusText"></p>
+            </div>
+        </div>
+
+        {{-- Error message --}}
+        <div x-show="errorMessage" x-cloak class="rounded-md bg-red-50 p-4">
+            <div class="flex">
+                <svg class="h-5 w-5 text-red-400" viewBox="0 0 20 20" fill="currentColor"><path fill-rule="evenodd" d="M10 18a8 8 0 100-16 8 8 0 000 16zM8.28 7.22a.75.75 0 00-1.06 1.06L8.94 10l-1.72 1.72a.75.75 0 101.06 1.06L10 11.06l1.72 1.72a.75.75 0 101.06-1.06L11.06 10l1.72-1.72a.75.75 0 00-1.06-1.06L10 8.94 8.28 7.22z" clip-rule="evenodd" /></svg>
+                <p class="ml-3 text-sm text-red-700" x-text="errorMessage"></p>
+            </div>
+        </div>
+
         <div class="flex items-center justify-end gap-4">
-            <a href="{{ route('admin.dramas.show', $drama) }}" class="text-sm font-semibold text-gray-700 hover:text-gray-900">Cancel</a>
-            <button type="submit" class="rounded-md bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-500">
+            <a href="{{ route('admin.dramas.show', $drama) }}" class="text-sm font-semibold text-gray-700 hover:text-gray-900"
+                x-show="!uploading">Cancel</a>
+            <button type="submit" x-show="!uploading"
+                class="rounded-md bg-brand-600 px-6 py-2.5 text-sm font-semibold text-white shadow-sm hover:bg-brand-500">
                 Add Episode
             </button>
         </div>
     </form>
 </div>
+
+<script>
+function episodeUpload() {
+    return {
+        uploading: false,
+        progress: 0,
+        statusText: '',
+        errorMessage: '',
+
+        submitForm(e) {
+            const form = e.target;
+            const formData = new FormData(form);
+
+            this.uploading = true;
+            this.progress = 0;
+            this.errorMessage = '';
+            this.statusText = 'Preparing upload...';
+
+            const xhr = new XMLHttpRequest();
+
+            xhr.upload.addEventListener('progress', (e) => {
+                if (e.lengthComputable) {
+                    this.progress = Math.round((e.loaded / e.total) * 100);
+                    const mb = (e.loaded / 1048576).toFixed(1);
+                    const totalMb = (e.total / 1048576).toFixed(1);
+                    this.statusText = mb + ' MB / ' + totalMb + ' MB uploaded';
+                }
+            });
+
+            xhr.addEventListener('load', () => {
+                if (xhr.status >= 200 && xhr.status < 400) {
+                    this.statusText = 'Upload complete! Redirecting...';
+                    this.progress = 100;
+                    // Follow the redirect
+                    window.location.href = xhr.responseURL || form.action;
+                } else {
+                    this.uploading = false;
+                    this.errorMessage = 'Upload failed (HTTP ' + xhr.status + '). Please try again.';
+                }
+            });
+
+            xhr.addEventListener('error', () => {
+                this.uploading = false;
+                this.errorMessage = 'Network error. Please check your connection and try again.';
+            });
+
+            xhr.addEventListener('abort', () => {
+                this.uploading = false;
+                this.errorMessage = 'Upload was cancelled.';
+            });
+
+            xhr.open('POST', form.action);
+            xhr.setRequestHeader('X-Requested-With', 'XMLHttpRequest');
+            xhr.setRequestHeader('Accept', 'text/html');
+            xhr.send(formData);
+        }
+    };
+}
+</script>
 @endsection

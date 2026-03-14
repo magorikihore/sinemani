@@ -163,6 +163,38 @@ class PaymentController extends Controller
 
         $plan = SubscriptionPlan::active()->findOrFail($request->plan_id);
 
+        // Prevent duplicate subscription purchase if user already has an active one
+        $activeSubscription = \App\Models\Subscription::where('user_id', $user->id)
+            ->where('status', 'active')
+            ->where('ends_at', '>', now())
+            ->first();
+
+        if ($activeSubscription) {
+            $daysRemaining = (int) now()->diffInDays($activeSubscription->ends_at, false);
+            return $this->error(
+                "You already have an active subscription ({$activeSubscription->plan->name}) with {$daysRemaining} days remaining. Please wait for it to expire or cancel it first.",
+                422,
+                null,
+                'SUBSCRIPTION_ALREADY_ACTIVE'
+            );
+        }
+
+        // Also check for any pending subscription payment to avoid double charges
+        $pendingPayment = MobilePayment::where('user_id', $user->id)
+            ->where('payment_type', 'subscription')
+            ->where('status', 'pending')
+            ->where('expires_at', '>', now())
+            ->first();
+
+        if ($pendingPayment) {
+            return $this->error(
+                'You already have a pending subscription payment. Please complete or wait for it to expire before trying again.',
+                422,
+                null,
+                'PAYMENT_PENDING'
+            );
+        }
+
         try {
             $payment = $this->paymentService->initiate(
                 user: $user,
