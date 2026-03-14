@@ -11,12 +11,16 @@ class EnsureUserIsActive
     public function handle(Request $request, Closure $next): Response
     {
         if ($request->user() && !$request->user()->is_active) {
-            // Revoke the token
-            $request->user()->currentAccessToken()->delete();
+            // Revoke the token if it's a personal access token
+            $token = $request->user()->currentAccessToken();
+            if ($token && method_exists($token, 'delete')) {
+                $token->delete();
+            }
 
             return response()->json([
                 'success' => false,
                 'message' => 'Your account has been suspended. Please contact support.',
+                'error_code' => 'ACCOUNT_SUSPENDED',
             ], 403);
         }
 

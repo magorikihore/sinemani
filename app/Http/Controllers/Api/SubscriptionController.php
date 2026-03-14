@@ -121,11 +121,11 @@ class SubscriptionController extends Controller
         $subscription = $this->subscriptionService->getActiveSubscription($user);
 
         if (!$subscription) {
-            return $this->error('No active subscription found', 404);
+            return $this->error('You don\'t have an active subscription to cancel.', 404, null, 'NO_ACTIVE_SUBSCRIPTION');
         }
 
         if ($subscription->isCancelled()) {
-            return $this->error('Subscription is already cancelled', 422);
+            return $this->error('Your subscription has already been cancelled.', 422, null, 'ALREADY_CANCELLED');
         }
 
         $reason = $request->input('reason');
@@ -150,7 +150,7 @@ class SubscriptionController extends Controller
             ->first();
 
         if (!$subscription) {
-            return $this->error('No cancelled subscription found to restore', 404);
+            return $this->error('No cancelled subscription found to restore.', 404, null, 'NO_CANCELLED_SUBSCRIPTION');
         }
 
         $subscription->update([
@@ -194,7 +194,7 @@ class SubscriptionController extends Controller
                 'coin_balance' => $user->fresh()->coin_balance,
             ], 'Receipt verified and subscription activated');
         } catch (\Exception $e) {
-            return $this->error('Receipt verification failed: ' . $e->getMessage(), 422);
+            return $this->error('We couldn\'t verify your purchase receipt. Please try again or contact support.', 422, null, 'RECEIPT_VERIFICATION_FAILED');
         }
     }
 

@@ -15,6 +15,8 @@ class WatchHistoryController extends Controller
     public function index(Request $request): JsonResponse
     {
         $histories = WatchHistory::where('user_id', $request->user()->id)
+            ->whereHas('drama')
+            ->whereHas('episode')
             ->with(['drama:id,title,cover_image,slug', 'episode:id,title,episode_number,season_number,thumbnail'])
             ->orderByDesc('updated_at')
             ->paginate($request->input('per_page', 20));
@@ -29,6 +31,8 @@ class WatchHistoryController extends Controller
     {
         $histories = WatchHistory::where('user_id', $request->user()->id)
             ->where('completed', false)
+            ->whereHas('drama')
+            ->whereHas('episode')
             ->with(['drama:id,title,cover_image,slug', 'episode:id,title,episode_number,season_number,thumbnail,duration'])
             ->orderByDesc('updated_at')
             ->limit(20)

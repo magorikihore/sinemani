@@ -36,7 +36,8 @@ return Application::configure(basePath: dirname(__DIR__))
             if ($request->is('api/*')) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Resource not found.',
+                    'message' => 'The requested resource was not found.',
+                    'error_code' => 'NOT_FOUND',
                 ], 404);
             }
         });
@@ -45,7 +46,8 @@ return Application::configure(basePath: dirname(__DIR__))
             if ($request->is('api/*')) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Method not allowed.',
+                    'message' => 'This action is not supported.',
+                    'error_code' => 'METHOD_NOT_ALLOWED',
                 ], 405);
             }
         });
@@ -54,21 +56,55 @@ return Application::configure(basePath: dirname(__DIR__))
             if ($request->is('api/*')) {
                 return response()->json([
                     'success' => false,
-                    'message' => 'Unauthenticated.',
+                    'message' => 'Please log in to continue.',
+                    'error_code' => 'UNAUTHENTICATED',
                 ], 401);
             }
         });
 
+        $exceptions->render(function (ValidationException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Please check your input and try again.',
+                    'error_code' => 'VALIDATION_ERROR',
+                    'errors' => $e->errors(),
+                ], 422);
+            }
+        });
+
+        $exceptions->render(function (\Illuminate\Database\Eloquent\ModelNotFoundException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'The requested item could not be found.',
+                    'error_code' => 'NOT_FOUND',
+                ], 404);
+            }
+        });
+
+        $exceptions->render(function (\Symfony\Component\HttpKernel\Exception\TooManyRequestsHttpException $e, Request $request) {
+            if ($request->is('api/*')) {
+                return response()->json([
+                    'success' => false,
+                    'message' => 'Too many requests. Please wait a moment and try again.',
+                    'error_code' => 'TOO_MANY_REQUESTS',
+                    'retry_after' => $e->getHeaders()['Retry-After'] ?? 60,
+                ], 429);
+            }
+        });
+
         $exceptions->render(function (\Throwable $e, Request $request) {
-            if ($request->is('api/*') && !app()->hasDebugModeEnabled()) {
+            if ($request->is('api/*')) {
                 $status = $e instanceof \Symfony\Component\HttpKernel\Exception\HttpExceptionInterface
                     ? $e->getStatusCode()
                     : 500;
                 return response()->json([
                     'success' => false,
                     'message' => $status === 500
-                        ? 'An unexpected error occurred. Please try again later.'
+                        ? 'Something went wrong. Please try again later.'
                         : $e->getMessage(),
+                    'error_code' => $status === 500 ? 'SERVER_ERROR' : 'ERROR',
                 ], $status);
             }
         });

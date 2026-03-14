@@ -94,7 +94,7 @@ class PaymentController extends Controller
             $resolved = $this->resolveUser($request);
             $user = $resolved['user'];
         } catch (\RuntimeException $e) {
-            return $this->error($e->getMessage(), 403);
+            return $this->error('This account has been suspended. Please contact support.', 403, null, 'ACCOUNT_SUSPENDED');
         }
 
         $package = CoinPackage::active()->findOrFail($request->package_id);
@@ -110,12 +110,15 @@ class PaymentController extends Controller
             );
 
             if ($payment->status === 'failed') {
-                return $this->error($payment->failure_reason ?? 'Payment gateway rejected the request.', 422);
+                return $this->error($payment->failure_reason ?? 'Payment could not be processed. Please try again.', 422, null, 'PAYMENT_FAILED');
             }
 
             $response = [
                 'payment' => $this->formatPayment($payment),
                 'message' => 'USSD push sent to your phone. Please complete the payment.',
+                'poll_url' => "/api/v1/payments/{$payment->reference}/status",
+                'poll_interval' => 5,
+                'should_continue_polling' => true,
             ];
 
             // If guest, include auth token and user info
@@ -132,10 +135,10 @@ class PaymentController extends Controller
 
             return $this->created($response, 'Payment initiated');
         } catch (\InvalidArgumentException $e) {
-            return $this->error($e->getMessage(), 422);
+            return $this->error('Please check your phone number and try again.', 422, null, 'INVALID_PHONE');
         } catch (\Exception $e) {
             Log::error('Payment initiation failed', ['error' => $e->getMessage()]);
-            return $this->error('Failed to initiate payment. Please try again.', 500);
+            return $this->error('We couldn\'t process your payment right now. Please try again.', 500, null, 'PAYMENT_ERROR');
         }
     }
 
@@ -155,7 +158,7 @@ class PaymentController extends Controller
             $resolved = $this->resolveUser($request);
             $user = $resolved['user'];
         } catch (\RuntimeException $e) {
-            return $this->error($e->getMessage(), 403);
+            return $this->error('This account has been suspended. Please contact support.', 403, null, 'ACCOUNT_SUSPENDED');
         }
 
         $plan = SubscriptionPlan::active()->findOrFail($request->plan_id);
@@ -171,12 +174,15 @@ class PaymentController extends Controller
             );
 
             if ($payment->status === 'failed') {
-                return $this->error($payment->failure_reason ?? 'Payment gateway rejected the request.', 422);
+                return $this->error($payment->failure_reason ?? 'Payment could not be processed. Please try again.', 422, null, 'PAYMENT_FAILED');
             }
 
             $response = [
                 'payment' => $this->formatPayment($payment),
                 'message' => 'USSD push sent to your phone. Please complete the payment.',
+                'poll_url' => "/api/v1/payments/{$payment->reference}/status",
+                'poll_interval' => 5,
+                'should_continue_polling' => true,
             ];
 
             // If guest, include auth token and user info
@@ -193,16 +199,17 @@ class PaymentController extends Controller
 
             return $this->created($response, 'Payment initiated');
         } catch (\InvalidArgumentException $e) {
-            return $this->error($e->getMessage(), 422);
+            return $this->error('Please check your phone number and try again.', 422, null, 'INVALID_PHONE');
         } catch (\Exception $e) {
             Log::error('Subscription payment failed', ['error' => $e->getMessage()]);
-            return $this->error('Failed to initiate payment. Please try again.', 500);
+            return $this->error('We couldn\'t process your payment right now. Please try again.', 500, null, 'PAYMENT_ERROR');
         }
     }
 
     /**
      * Check payment status.
      * Authenticated users see their own; guests look up by reference only.
+     * Actively polls the gateway if the payment is still pending.
      */
     public function status(Request $request, string $reference): JsonResponse
     {
@@ -219,6 +226,18 @@ class PaymentController extends Controller
             return $this->notFound('Payment not found');
         }
 
+        // Actively poll the gateway if payment is still pending/processing
+        if ($payment->isPending() && $payment->gateway_reference) {
+            $this->paymentService->pollGatewayStatus($payment);
+            $payment->refresh();
+        }
+
+        // Auto-expire payments that exceeded the expiry window
+        if ($payment->isPending() && $payment->expires_at && $payment->expires_at->isPast()) {
+            $payment->markFailed('Payment expired');
+            $payment->refresh();
+        }
+
         $data = $this->formatPayment($payment);
 
         // If completed, include result details
@@ -227,6 +246,10 @@ class PaymentController extends Controller
             $data['coin_balance'] = $user->coin_balance;
             $data['is_vip'] = $user->isVipActive();
         }
+
+        // Tell the app whether to keep polling and how often
+        $data['should_continue_polling'] = $payment->isPending();
+        $data['poll_interval'] = $payment->isPending() ? 5 : 0;
 
         return $this->success($data);
     }
@@ -299,7 +322,8 @@ class PaymentController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => $e->getMessage(),
+                'message' => 'Payment reference not found.',
+                'error_code' => 'PAYMENT_NOT_FOUND',
             ], 404);
         } catch (\Exception $e) {
             Log::error('MobilePayment callback exception', [
@@ -309,7 +333,8 @@ class PaymentController extends Controller
 
             return response()->json([
                 'success' => false,
-                'message' => 'Internal error processing callback',
+                'message' => 'Internal error processing callback.',
+                'error_code' => 'SERVER_ERROR',
             ], 500);
         }
     }

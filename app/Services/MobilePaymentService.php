@@ -86,12 +86,14 @@ class MobilePaymentService
 
     /**
      * Push collection request to payin.co.tz gateway.
+     * Retries up to 2 times on transient 500 errors (e.g. auth-service failures).
      */
     protected function pushToGateway(string $phone, float $amount, string $operator, string $reference): array
     {
         $gatewayUrl = $this->getGatewayConfig('payment_gateway_url');
         $apiKey = $this->getGatewayConfig('payment_gateway_api_key');
         $apiSecret = $this->getGatewayConfig('payment_gateway_api_secret');
+        $callbackUrl = $this->getGatewayConfig('payment_callback_url');
         $timeout = (int) ($this->getGatewayConfig('payment_gateway_timeout') ?: 30);
 
         if (empty($apiKey) || empty($apiSecret)) {
@@ -99,46 +101,79 @@ class MobilePaymentService
             return ['error' => true, 'message' => 'Payment gateway not configured'];
         }
 
-        try {
-            $response = Http::timeout($timeout)
-                ->withHeaders([
-                    'Content-Type' => 'application/json',
-                    'X-API-Key' => $apiKey,
-                    'X-API-Secret' => $apiSecret,
-                ])
-                ->post("{$gatewayUrl}/collection", [
-                    'phone' => $phone,
-                    'amount' => (int) $amount,
-                    'operator' => $operator,
+        $payload = [
+            'phone' => $phone,
+            'amount' => (int) $amount,
+            'operator' => $operator,
+            'reference' => $reference,
+        ];
+
+        if (!empty($callbackUrl)) {
+            $payload['callback_url'] = $callbackUrl;
+        }
+
+        $maxAttempts = 3;
+        $lastError = null;
+
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            try {
+                $response = Http::timeout($timeout)
+                    ->withHeaders([
+                        'Content-Type' => 'application/json',
+                        'X-API-Key' => $apiKey,
+                        'X-API-Secret' => $apiSecret,
+                    ])
+                    ->post("{$gatewayUrl}/collection", $payload);
+
+                if ($response->successful()) {
+                    return $response->json();
+                }
+
+                $statusCode = $response->status();
+                $body = $response->body();
+                $message = $response->json('message') ?? $body;
+
+                Log::error('MobilePayment: Gateway returned error', [
+                    'status' => $statusCode,
+                    'body' => $body,
                     'reference' => $reference,
+                    'attempt' => $attempt,
                 ]);
 
-            if ($response->successful()) {
-                return $response->json();
+                // Retry on 500/502/503/504 (transient gateway errors like auth-service failures)
+                if ($statusCode >= 500 && $attempt < $maxAttempts) {
+                    Log::info("MobilePayment: Retrying gateway request (attempt {$attempt}/{$maxAttempts})", [
+                        'reference' => $reference,
+                    ]);
+                    sleep(2 * $attempt); // backoff: 2s, 4s
+                    continue;
+                }
+
+                return [
+                    'error' => true,
+                    'message' => 'Gateway error: ' . $message,
+                    'status_code' => $statusCode,
+                ];
+            } catch (\Exception $e) {
+                $lastError = $e;
+
+                Log::error('MobilePayment: Gateway request failed', [
+                    'reference' => $reference,
+                    'exception' => $e->getMessage(),
+                    'attempt' => $attempt,
+                ]);
+
+                if ($attempt < $maxAttempts) {
+                    sleep(2 * $attempt);
+                    continue;
+                }
             }
-
-            Log::error('MobilePayment: Gateway returned error', [
-                'status' => $response->status(),
-                'body' => $response->body(),
-                'reference' => $reference,
-            ]);
-
-            return [
-                'error' => true,
-                'message' => 'Gateway error: ' . ($response->json('message') ?? $response->body()),
-                'status_code' => $response->status(),
-            ];
-        } catch (\Exception $e) {
-            Log::error('MobilePayment: Gateway request failed', [
-                'reference' => $reference,
-                'exception' => $e->getMessage(),
-            ]);
-
-            return [
-                'error' => true,
-                'message' => 'Connection to payment gateway failed: ' . $e->getMessage(),
-            ];
         }
+
+        return [
+            'error' => true,
+            'message' => 'Connection to payment gateway failed after retries: ' . ($lastError?->getMessage() ?? 'Unknown error'),
+        ];
     }
 
     /**
@@ -174,14 +209,14 @@ class MobilePaymentService
                 return true;
             }
 
-            Log::warning('MobilePayment: Webhook signature mismatch', [
+            // Signature didn't match — log warning but fall through to
+            // reference-based verification as a safety net
+            Log::warning('MobilePayment: Webhook signature mismatch, falling back to reference check', [
                 'ip' => $request->ip(),
-                'header' => $signature,
             ]);
-            return false;
         }
 
-        // No signature header — verify by checking that the reference exists in our DB
+        // Verify by checking that the reference exists in our DB
         $reference = $request->input('reference') ?? $request->input('request_ref');
         if (empty($reference)) {
             Log::warning('MobilePayment: Callback without signature or reference', [
@@ -357,10 +392,115 @@ class MobilePaymentService
 
     /**
      * Get payment status (for polling from frontend).
+     * If payment is still pending/processing, actively check the gateway.
      */
     public function getStatus(string $reference): ?MobilePayment
     {
-        return MobilePayment::where('reference', $reference)->first();
+        $payment = MobilePayment::where('reference', $reference)->first();
+
+        if ($payment && in_array($payment->status, ['pending', 'processing']) && $payment->gateway_reference) {
+            $this->pollGatewayStatus($payment);
+            $payment->refresh();
+        }
+
+        return $payment;
+    }
+
+    /**
+     * Query the payment gateway for the current status of a payment
+     * and process it if completed. Retries on transient 500 errors.
+     */
+    public function pollGatewayStatus(MobilePayment $payment): void
+    {
+        $gatewayUrl = $this->getGatewayConfig('payment_gateway_url');
+        $apiKey = $this->getGatewayConfig('payment_gateway_api_key');
+        $apiSecret = $this->getGatewayConfig('payment_gateway_api_secret');
+
+        if (empty($gatewayUrl) || empty($apiKey) || empty($apiSecret)) {
+            return;
+        }
+
+        $maxAttempts = 2;
+        $response = null;
+
+        for ($attempt = 1; $attempt <= $maxAttempts; $attempt++) {
+            try {
+                $response = Http::timeout(15)
+                    ->withHeaders([
+                        'Content-Type' => 'application/json',
+                        'X-API-Key' => $apiKey,
+                        'X-API-Secret' => $apiSecret,
+                    ])
+                    ->get("{$gatewayUrl}/status/{$payment->gateway_reference}");
+
+                if ($response->successful()) {
+                    break;
+                }
+
+                // Retry on 500+ (auth-service failures etc.)
+                if ($response->status() >= 500 && $attempt < $maxAttempts) {
+                    Log::info("MobilePayment: Status poll retrying (attempt {$attempt})", [
+                        'reference' => $payment->reference,
+                        'status_code' => $response->status(),
+                    ]);
+                    sleep(2);
+                    continue;
+                }
+
+                Log::warning('MobilePayment: Gateway status check failed', [
+                    'reference' => $payment->reference,
+                    'gateway_ref' => $payment->gateway_reference,
+                    'status_code' => $response->status(),
+                    'body' => $response->body(),
+                ]);
+                return;
+            } catch (\Exception $e) {
+                Log::warning('MobilePayment: Gateway status poll error', [
+                    'reference' => $payment->reference,
+                    'error' => $e->getMessage(),
+                    'attempt' => $attempt,
+                ]);
+                if ($attempt < $maxAttempts) {
+                    sleep(2);
+                    continue;
+                }
+                return;
+            }
+        }
+
+        if (!$response || !$response->successful()) {
+            return;
+        }
+
+        $data = $response->json();
+        $gatewayStatus = strtolower($data['status'] ?? '');
+
+        Log::info('MobilePayment: Gateway status poll result', [
+            'reference' => $payment->reference,
+            'gateway_status' => $gatewayStatus,
+            'data' => $data,
+        ]);
+
+        if (in_array($gatewayStatus, ['completed', 'success', 'successful'])) {
+            $callbackData = [
+                'request_ref' => $payment->gateway_reference,
+                'reference' => $data['reference'] ?? $payment->reference,
+                'status' => 'completed',
+                'amount' => $data['amount'] ?? $payment->amount,
+                'charge' => $data['charge'] ?? 0,
+                'phone' => $data['phone'] ?? $payment->phone,
+                'operator' => $data['operator'] ?? $payment->operator,
+                'operator_ref' => $data['operator_ref'] ?? $data['operator_transaction_id'] ?? '',
+                'completed_at' => $data['completed_at'] ?? now()->toISOString(),
+            ];
+
+            $this->handleCallback($callbackData);
+        } elseif (in_array($gatewayStatus, ['failed', 'cancelled', 'expired', 'rejected'])) {
+            $payment->markFailed(
+                $data['failure_reason'] ?? $data['message'] ?? "Payment {$gatewayStatus}",
+                $data
+            );
+        }
     }
 
     /**

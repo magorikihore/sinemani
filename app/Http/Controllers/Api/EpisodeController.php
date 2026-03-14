@@ -57,14 +57,22 @@ class EpisodeController extends Controller
 
             // If unlocked, provide streaming URL
             if ($isUnlocked) {
-                $data['stream_url'] = $episode->hls_url ?? $episode->video_url;
+                $streamPath = $episode->hls_url ?? $episode->video_url;
+                $data['stream_url'] = $streamPath
+                    ? (str_starts_with($streamPath, 'http') ? $streamPath : asset('storage/' . $streamPath))
+                    : null;
             } else {
                 // Don't expose video URLs for locked episodes
                 unset($data['video_url'], $data['video_path'], $data['hls_url']);
             }
         } else {
             $data['is_unlocked'] = $episode->is_free || $episode->drama->is_free;
-            if (!$data['is_unlocked']) {
+            if ($data['is_unlocked']) {
+                $streamPath = $episode->hls_url ?? $episode->video_url;
+                $data['stream_url'] = $streamPath
+                    ? (str_starts_with($streamPath, 'http') ? $streamPath : asset('storage/' . $streamPath))
+                    : null;
+            } else {
                 unset($data['video_url'], $data['video_path'], $data['hls_url']);
             }
         }
@@ -85,13 +93,19 @@ class EpisodeController extends Controller
         try {
             $unlock = $this->unlockService->unlock($user, $episode);
 
+            $streamPath = $episode->hls_url ?? $episode->video_url;
+            $streamUrl = $streamPath
+                ? (str_starts_with($streamPath, 'http') ? $streamPath : asset('storage/' . $streamPath))
+                : null;
+
             return $this->success([
                 'unlock' => $unlock,
                 'coin_balance' => $user->fresh()->coin_balance,
-                'stream_url' => $episode->hls_url ?? $episode->video_url,
+                'stream_url' => $streamUrl,
             ], 'Episode unlocked successfully');
         } catch (\App\Exceptions\InsufficientCoinsException $e) {
-            return $this->error($e->getMessage(), 422);
+            // Let the exception's render() handle the response
+            throw $e;
         }
     }
 
@@ -141,9 +155,47 @@ class EpisodeController extends Controller
         }
 
         if (!$nextEpisode) {
-            return $this->success(null, 'No more episodes');
+            $currentDrama = $episode->drama()->with('category')->first();
+
+            // Suggest similar dramas from the same category
+            $suggestions = \App\Models\Drama::published()
+                ->where('id', '!=', $currentDrama->id)
+                ->where('category_id', $currentDrama->category_id)
+                ->with('category')
+                ->inRandomOrder()
+                ->limit(6)
+                ->get();
+
+            // If not enough from same category, fill with trending
+            if ($suggestions->count() < 6) {
+                $existingIds = $suggestions->pluck('id')->push($currentDrama->id)->toArray();
+                $more = \App\Models\Drama::published()
+                    ->whereNotIn('id', $existingIds)
+                    ->trending()
+                    ->with('category')
+                    ->limit(6 - $suggestions->count())
+                    ->get();
+                $suggestions = $suggestions->concat($more);
+            }
+
+            return $this->success([
+                'has_next' => false,
+                'is_series_complete' => true,
+                'message' => "You've finished \"{$currentDrama->title}\"! Hope you enjoyed it.",
+                'drama' => [
+                    'id' => $currentDrama->id,
+                    'title' => $currentDrama->title,
+                    'cover_image' => $currentDrama->cover_image,
+                    'total_episodes' => $currentDrama->total_episodes,
+                    'rating' => $currentDrama->rating,
+                ],
+                'suggestions' => $suggestions,
+            ]);
         }
 
-        return $this->success($nextEpisode);
+        return $this->success([
+            'has_next' => true,
+            'episode' => $nextEpisode,
+        ]);
     }
 }

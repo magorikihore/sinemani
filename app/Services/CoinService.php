@@ -60,9 +60,7 @@ class CoinService
             $user = User::lockForUpdate()->find($user->id);
 
             if ($user->coin_balance < $amount) {
-                throw new \App\Exceptions\InsufficientCoinsException(
-                    'Insufficient coin balance. Required: ' . $amount . ', Available: ' . $user->coin_balance
-                );
+                throw new \App\Exceptions\InsufficientCoinsException($amount, $user->coin_balance);
             }
 
             $balanceBefore = $user->coin_balance;

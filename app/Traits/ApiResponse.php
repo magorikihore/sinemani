@@ -28,11 +28,12 @@ trait ApiResponse
         ], 200);
     }
 
-    protected function error(string $message = 'Error', int $code = 400, mixed $errors = null): JsonResponse
+    protected function error(string $message = 'Error', int $code = 400, mixed $errors = null, ?string $errorCode = null): JsonResponse
     {
         $response = [
             'success' => false,
             'message' => $message,
+            'error_code' => $errorCode ?? $this->httpStatusToErrorCode($code),
         ];
 
         if ($errors) {
@@ -44,17 +45,35 @@ trait ApiResponse
 
     protected function unauthorized(string $message = 'Unauthorized'): JsonResponse
     {
-        return $this->error($message, 401);
+        return $this->error($message, 401, null, 'UNAUTHENTICATED');
     }
 
     protected function forbidden(string $message = 'Forbidden'): JsonResponse
     {
-        return $this->error($message, 403);
+        return $this->error($message, 403, null, 'FORBIDDEN');
     }
 
     protected function notFound(string $message = 'Not found'): JsonResponse
     {
-        return $this->error($message, 404);
+        return $this->error($message, 404, null, 'NOT_FOUND');
+    }
+
+    private function httpStatusToErrorCode(int $code): string
+    {
+        return match ($code) {
+            400 => 'BAD_REQUEST',
+            401 => 'UNAUTHENTICATED',
+            403 => 'FORBIDDEN',
+            404 => 'NOT_FOUND',
+            405 => 'METHOD_NOT_ALLOWED',
+            409 => 'CONFLICT',
+            422 => 'VALIDATION_ERROR',
+            429 => 'TOO_MANY_REQUESTS',
+            500 => 'SERVER_ERROR',
+            502 => 'BAD_GATEWAY',
+            503 => 'SERVICE_UNAVAILABLE',
+            default => 'ERROR',
+        };
     }
 
     protected function paginated($paginator, string $message = 'Success'): JsonResponse

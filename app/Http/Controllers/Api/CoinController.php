@@ -68,7 +68,7 @@ class CoinController extends Controller
                 'coin_balance' => $request->user()->fresh()->coin_balance,
             ], 'Daily reward claimed!');
         } catch (\Exception $e) {
-            return $this->error($e->getMessage(), 422);
+            return $this->error('You have already claimed your daily reward today. Come back tomorrow!', 422, null, 'DAILY_REWARD_CLAIMED');
         }
     }
 
