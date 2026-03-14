@@ -55,15 +55,15 @@ class SubscriptionController extends Controller
         $user = $request->user();
         $plan = SubscriptionPlan::active()->findOrFail($request->plan_id);
 
-        // Prevent duplicate subscription purchase
-        if ($this->subscriptionService->hasActiveSubscription($user)) {
-            $active = $this->subscriptionService->getActiveSubscription($user);
+        // Prevent duplicate purchase of the same plan; allow upgrades to different plans
+        $active = $this->subscriptionService->getActiveSubscription($user);
+        if ($active && $active->subscription_plan_id === $plan->id) {
             $daysRemaining = (int) now()->diffInDays($active->ends_at, false);
             return $this->error(
-                "You already have an active subscription ({$active->plan->name}) with {$daysRemaining} days remaining. Please wait for it to expire or cancel it first.",
+                "You already have an active {$active->plan->name} plan with {$daysRemaining} days remaining. You can switch to a different plan or wait for it to expire.",
                 422,
                 null,
-                'SUBSCRIPTION_ALREADY_ACTIVE'
+                'SAME_PLAN_ALREADY_ACTIVE'
             );
         }
 

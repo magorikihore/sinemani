@@ -163,19 +163,19 @@ class PaymentController extends Controller
 
         $plan = SubscriptionPlan::active()->findOrFail($request->plan_id);
 
-        // Prevent duplicate subscription purchase if user already has an active one
+        // Prevent duplicate purchase of the same plan; allow upgrades/downgrades to different plans
         $activeSubscription = \App\Models\Subscription::where('user_id', $user->id)
             ->where('status', 'active')
             ->where('ends_at', '>', now())
             ->first();
 
-        if ($activeSubscription) {
+        if ($activeSubscription && $activeSubscription->subscription_plan_id === $plan->id) {
             $daysRemaining = (int) now()->diffInDays($activeSubscription->ends_at, false);
             return $this->error(
-                "You already have an active subscription ({$activeSubscription->plan->name}) with {$daysRemaining} days remaining. Please wait for it to expire or cancel it first.",
+                "You already have an active {$activeSubscription->plan->name} plan with {$daysRemaining} days remaining. You can switch to a different plan or wait for it to expire.",
                 422,
                 null,
-                'SUBSCRIPTION_ALREADY_ACTIVE'
+                'SAME_PLAN_ALREADY_ACTIVE'
             );
         }
 

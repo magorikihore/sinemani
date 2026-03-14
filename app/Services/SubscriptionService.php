@@ -28,11 +28,18 @@ class SubscriptionService
         ?array $paymentMeta = null,
     ): Subscription {
         return DB::transaction(function () use ($user, $plan, $paymentProvider, $transactionId, $storeTransactionId, $paymentMeta) {
-            // If user already has an active subscription, extend from its end date
             $activeSubscription = $this->getActiveSubscription($user);
-            $startsAt = $activeSubscription && $activeSubscription->ends_at->isFuture()
-                ? $activeSubscription->ends_at
-                : now();
+
+            if ($activeSubscription && $activeSubscription->subscription_plan_id !== $plan->id) {
+                // Upgrading/switching plan — cancel the old one and start new plan from now
+                $this->cancel($activeSubscription, 'Switched to ' . $plan->name);
+                $startsAt = now();
+            } elseif ($activeSubscription && $activeSubscription->ends_at->isFuture()) {
+                // Same plan renewal — extend from current end date
+                $startsAt = $activeSubscription->ends_at;
+            } else {
+                $startsAt = now();
+            }
 
             $endsAt = $startsAt->copy()->addDays($plan->duration_days);
 
