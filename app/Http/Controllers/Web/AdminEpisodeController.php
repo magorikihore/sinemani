@@ -39,6 +39,7 @@ class AdminEpisodeController extends Controller
         $data['drama_id'] = $drama->id;
         $data['slug'] = Str::slug($data['title']) . '-' . Str::random(6);
         $data['is_free'] = $request->boolean('is_free');
+        $data['duration'] = $data['duration'] ?? 0;
 
         if ($request->hasFile('thumbnail')) {
             $data['thumbnail'] = $request->file('thumbnail')
@@ -47,7 +48,7 @@ class AdminEpisodeController extends Controller
 
         if ($request->hasFile('video')) {
             $videoFile = $request->file('video');
-            $data['video_path'] = $videoFile->store("dramas/{$drama->id}/videos", 'local');
+            $data['video_path'] = $videoFile->store("dramas/{$drama->id}/videos", 'public');
             $data['file_size'] = $videoFile->getSize();
         }
 
@@ -90,6 +91,7 @@ class AdminEpisodeController extends Controller
         ]);
 
         $data['is_free'] = $request->boolean('is_free');
+        $data['duration'] = $data['duration'] ?? $episode->duration ?? 0;
 
         if ($request->hasFile('thumbnail')) {
             if ($episode->thumbnail) {
@@ -101,10 +103,10 @@ class AdminEpisodeController extends Controller
 
         if ($request->hasFile('video')) {
             if ($episode->video_path) {
-                Storage::delete($episode->video_path);
+                Storage::disk('public')->delete($episode->video_path);
             }
             $videoFile = $request->file('video');
-            $data['video_path'] = $videoFile->store("dramas/{$drama->id}/videos", 'local');
+            $data['video_path'] = $videoFile->store("dramas/{$drama->id}/videos", 'public');
             $data['file_size'] = $videoFile->getSize();
         }
 
@@ -131,7 +133,7 @@ class AdminEpisodeController extends Controller
             Storage::disk('public')->delete($episode->thumbnail);
         }
         if ($episode->video_path) {
-            Storage::delete($episode->video_path);
+            Storage::disk('public')->delete($episode->video_path);
         }
 
         $episode->delete();
