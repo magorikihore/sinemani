@@ -35,6 +35,7 @@ class User extends Authenticatable
         'is_vip',
         'vip_expires_at',
         'fcm_token',
+        'expo_push_token',
         'device_id',
         'last_login_at',
     ];

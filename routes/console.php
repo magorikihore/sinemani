@@ -5,6 +5,7 @@ use Illuminate\Support\Facades\Artisan;
 use Illuminate\Support\Facades\Schedule;
 use App\Services\SubscriptionService;
 use App\Services\MobilePaymentService;
+use App\Services\PushNotificationService;
 
 Artisan::command('inspire', function () {
     $this->comment(Inspiring::quote());
@@ -52,3 +53,9 @@ Schedule::call(function () {
 Schedule::command('sanctum:prune-expired --hours=720')
     ->daily()
     ->name('prune-expired-tokens');
+
+// Send daily reward reminder push notification at 10 AM
+Schedule::call(function () {
+    $sent = app(PushNotificationService::class)->sendDailyRewardReminder();
+    logger("Sent daily reward reminder to {$sent} users");
+})->dailyAt('10:00')->name('daily-reward-reminder')->withoutOverlapping();

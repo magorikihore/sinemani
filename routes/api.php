@@ -22,6 +22,7 @@ use App\Http\Controllers\Admin\ContentManagementController;
 use App\Http\Controllers\Admin\ReportManagementController;
 use App\Http\Controllers\Api\SubscriptionController;
 use App\Http\Controllers\Api\PaymentController;
+use App\Http\Controllers\Api\PromotionController;
 
 /*
 |--------------------------------------------------------------------------
@@ -85,6 +86,7 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'active'])->group(function () {
     Route::post('auth/logout', [AuthController::class, 'logout']);
     Route::get('auth/me', [AuthController::class, 'me']);
     Route::put('auth/fcm-token', [AuthController::class, 'updateFcmToken']);
+    Route::put('auth/push-token', [AuthController::class, 'updatePushToken']);
 
     // Profile
     Route::put('profile', [ProfileController::class, 'update']);
@@ -152,6 +154,9 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'active'])->group(function () {
 
     // Reports
     Route::post('reports', [ReportController::class, 'store']);
+
+    // Promotions
+    Route::get('promotions/popup', [PromotionController::class, 'activePopup']);
 });
 
 // ── Admin Routes ───────────────────────────────────────────────────
@@ -224,4 +229,11 @@ Route::prefix('admin')->middleware(['auth:sanctum', 'active', 'role:admin'])->gr
     // Report Management
     Route::get('reports', [ReportManagementController::class, 'index']);
     Route::put('reports/{report}', [ReportManagementController::class, 'review']);
+
+    // Promotions Management
+    Route::get('promotions', [PromotionController::class, 'index']);
+    Route::post('promotions', [PromotionController::class, 'store']);
+    Route::put('promotions/{promotion}', [PromotionController::class, 'update']);
+    Route::delete('promotions/{promotion}', [PromotionController::class, 'destroy']);
+    Route::post('promotions/send-push', [PromotionController::class, 'sendPush']);
 });

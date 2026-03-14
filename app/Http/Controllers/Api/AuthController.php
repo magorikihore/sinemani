@@ -249,6 +249,20 @@ class AuthController extends Controller
     }
 
     /**
+     * Register Expo push token for push notifications.
+     */
+    public function updatePushToken(Request $request): JsonResponse
+    {
+        $request->validate([
+            'push_token' => ['required', 'string', 'starts_with:ExponentPushToken['],
+        ]);
+
+        $request->user()->update(['expo_push_token' => $request->push_token]);
+
+        return $this->success(null, 'Push token registered');
+    }
+
+    /**
      * Verify social login token with provider.
      */
     private function verifySocialToken(string $provider, string $token): ?array
