@@ -137,6 +137,60 @@
             </div>
         </div>
 
+        {{-- Subtitles --}}
+        <div class="bg-white shadow rounded-lg" x-data="subtitlesManager()">
+            <div class="px-4 py-5 sm:p-6 space-y-4">
+                <h3 class="text-base font-semibold text-gray-900 border-b pb-3">Subtitles (CC)</h3>
+
+                @if($episode->subtitles->count())
+                    <div class="space-y-2">
+                        @foreach($episode->subtitles as $sub)
+                            <label class="flex items-center justify-between rounded border border-gray-200 px-3 py-2">
+                                <div class="text-sm">
+                                    <span class="font-medium text-gray-900">{{ $sub->label ?: strtoupper($sub->language) }}</span>
+                                    <span class="text-gray-500"> · {{ strtoupper($sub->format) }} · {{ $sub->language }}</span>
+                                </div>
+                                <span class="flex items-center gap-2 text-xs text-red-600">
+                                    <input type="checkbox" name="delete_subtitles[]" value="{{ $sub->id }}" class="rounded border-gray-300 text-red-600 focus:ring-red-500">
+                                    Remove
+                                </span>
+                            </label>
+                        @endforeach
+                    </div>
+                @else
+                    <p class="text-sm text-gray-500">No subtitles uploaded yet.</p>
+                @endif
+
+                <template x-for="(row, idx) in rows" :key="idx">
+                    <div class="grid grid-cols-12 gap-3 items-end border-t pt-3">
+                        <div class="col-span-3">
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Language</label>
+                            <input type="text" :name="'subtitles['+idx+'][language]'" placeholder="en"
+                                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 sm:text-sm">
+                        </div>
+                        <div class="col-span-4">
+                            <label class="block text-xs font-medium text-gray-700 mb-1">Label</label>
+                            <input type="text" :name="'subtitles['+idx+'][label]'" placeholder="English"
+                                class="block w-full rounded-md border-gray-300 shadow-sm focus:border-brand-500 focus:ring-brand-500 sm:text-sm">
+                        </div>
+                        <div class="col-span-4">
+                            <label class="block text-xs font-medium text-gray-700 mb-1">File (.srt or .vtt)</label>
+                            <input type="file" :name="'subtitles['+idx+'][file]'" accept=".srt,.vtt,text/plain,text/vtt,application/x-subrip"
+                                class="block w-full text-sm text-gray-700">
+                        </div>
+                        <div class="col-span-1 flex justify-end">
+                            <button type="button" @click="rows.splice(idx,1)" class="text-red-600 hover:text-red-800 text-sm">×</button>
+                        </div>
+                    </div>
+                </template>
+
+                <button type="button" @click="rows.push({})"
+                    class="text-sm font-semibold text-brand-600 hover:text-brand-800">
+                    + Add subtitle track
+                </button>
+            </div>
+        </div>
+
         {{-- Upload Progress --}}
         <div x-show="uploading" x-cloak class="bg-white shadow rounded-lg">
             <div class="px-4 py-5 sm:p-6">
@@ -185,6 +239,12 @@
 </div>
 
 <script>
+function subtitlesManager() {
+    return {
+        rows: [],
+    };
+}
+
 function episodeUpload() {
     return {
         uploading: false,

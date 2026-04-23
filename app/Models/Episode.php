@@ -76,6 +76,11 @@ class Episode extends Model
         return $this->hasMany(EpisodeUnlock::class);
     }
 
+    public function subtitles(): HasMany
+    {
+        return $this->hasMany(EpisodeSubtitle::class)->orderBy('sort_order')->orderBy('language');
+    }
+
     // ── Scopes ─────────────────────────────────────────
 
     public function scopePublished($query)

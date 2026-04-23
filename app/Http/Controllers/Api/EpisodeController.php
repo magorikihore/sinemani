@@ -26,6 +26,7 @@ class EpisodeController extends Controller
         }
 
         $episode->load('drama');
+        $episode->load('subtitles');
         // Resolve user from Bearer token even on public route
         $user = $request->user() ?? $request->user('sanctum');
         if (!$user && $request->bearerToken()) {
@@ -37,6 +38,12 @@ class EpisodeController extends Controller
 
         $data = $episode->toArray();
         $data['drama_title'] = $episode->drama->title;
+        $data['subtitles'] = $episode->subtitles->map(fn ($s) => [
+            'language' => $s->language,
+            'label' => $s->label ?: strtoupper($s->language),
+            'url' => $s->url,
+            'format' => $s->format,
+        ])->values();
 
         if ($user) {
             $isUnlocked = $this->unlockService->isUnlocked($user, $episode);
