@@ -169,4 +169,35 @@ class AuthTest extends TestCase
 
         $response->assertStatus(401);
     }
+
+    public function test_authenticated_user_can_register_expo_push_token_with_new_prefix(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $user->assignRole('user');
+
+        $response = $this->actingAs($user)
+            ->putJson('/api/v1/auth/push-token', [
+                'push_token' => 'ExpoPushToken[abc123xyz]'
+            ]);
+
+        $response->assertOk();
+        $this->assertDatabaseHas('users', [
+            'id' => $user->id,
+            'expo_push_token' => 'ExpoPushToken[abc123xyz]',
+        ]);
+    }
+
+    public function test_push_token_rejects_invalid_format(): void
+    {
+        $user = User::factory()->create(['is_active' => true]);
+        $user->assignRole('user');
+
+        $response = $this->actingAs($user)
+            ->putJson('/api/v1/auth/push-token', [
+                'push_token' => 'invalid-token-format'
+            ]);
+
+        $response->assertStatus(422)
+            ->assertJsonValidationErrors(['push_token']);
+    }
 }

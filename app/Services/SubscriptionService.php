@@ -153,15 +153,37 @@ class SubscriptionService
             throw new \RuntimeException($verification['error'] ?? 'Receipt verification failed');
         }
 
+        $transactionId = $verification['transaction_id'] ?? null;
+        $storeTransactionId = $verification['store_transaction_id'] ?? $transactionId;
+
+        // Idempotency: return existing subscription if this store transaction was already processed.
+        $existing = Subscription::where('user_id', $user->id)
+            ->where(function ($q) use ($transactionId, $storeTransactionId) {
+                if ($transactionId) {
+                    $q->orWhere('transaction_id', $transactionId);
+                }
+
+                if ($storeTransactionId) {
+                    $q->orWhere('store_transaction_id', $storeTransactionId);
+                }
+            })
+            ->latest()
+            ->first();
+
+        if ($existing) {
+            return $existing;
+        }
+
         return $this->subscribe(
             $user,
             $plan,
             $provider,
-            $verification['transaction_id'] ?? null,
-            $receipt,
+            $transactionId,
+            $storeTransactionId,
             [
                 'receipt' => substr($receipt, 0, 100) . '...',
                 'product_id' => $productId,
+                'store_transaction_id' => $storeTransactionId,
                 'store_verified' => true,
                 'verification_time' => now()->toISOString(),
             ],
@@ -208,24 +230,38 @@ class SubscriptionService
                     return ['valid' => false, 'error' => "Apple verification status: {$status}"];
                 }
 
-                // Find matching in-app purchase
+                // Find matching in-app purchase and use the latest transaction for this product.
                 $latestReceipt = $data['latest_receipt_info'] ?? $data['receipt']['in_app'] ?? [];
-                $matchingPurchase = null;
+                $matchingPurchases = [];
 
                 foreach ($latestReceipt as $purchase) {
                     if (($purchase['product_id'] ?? '') === $productId) {
-                        $matchingPurchase = $purchase;
-                        break;
+                        $matchingPurchases[] = $purchase;
                     }
                 }
 
-                if (!$matchingPurchase) {
+                if (empty($matchingPurchases)) {
                     return ['valid' => false, 'error' => 'Product not found in receipt'];
+                }
+
+                usort($matchingPurchases, function ($a, $b) {
+                    $aExpiry = (int) ($a['expires_date_ms'] ?? $a['purchase_date_ms'] ?? 0);
+                    $bExpiry = (int) ($b['expires_date_ms'] ?? $b['purchase_date_ms'] ?? 0);
+                    return $bExpiry <=> $aExpiry;
+                });
+
+                $matchingPurchase = $matchingPurchases[0];
+                $expiresAtMs = (int) ($matchingPurchase['expires_date_ms'] ?? 0);
+                if ($expiresAtMs > 0 && $expiresAtMs <= (now()->timestamp * 1000)) {
+                    return ['valid' => false, 'error' => 'Subscription has expired'];
                 }
 
                 return [
                     'valid' => true,
                     'transaction_id' => $matchingPurchase['transaction_id'] ?? null,
+                    'store_transaction_id' => $matchingPurchase['original_transaction_id']
+                        ?? $matchingPurchase['transaction_id']
+                        ?? null,
                     'product_id' => $productId,
                 ];
             } catch (\Exception $e) {
@@ -276,13 +312,19 @@ class SubscriptionService
 
             // Check payment state (0=pending, 1=received, 2=trial, 3=deferred)
             $paymentState = $data['paymentState'] ?? -1;
-            if (!in_array($paymentState, [1, 2], true)) {
+            if ($paymentState !== -1 && !in_array($paymentState, [1, 2], true)) {
                 return ['valid' => false, 'error' => "Invalid payment state: {$paymentState}"];
+            }
+
+            $expiryTimeMillis = (int) ($data['expiryTimeMillis'] ?? 0);
+            if ($expiryTimeMillis > 0 && $expiryTimeMillis <= (now()->timestamp * 1000)) {
+                return ['valid' => false, 'error' => 'Subscription has expired'];
             }
 
             return [
                 'valid' => true,
                 'transaction_id' => $data['orderId'] ?? null,
+                'store_transaction_id' => $purchaseToken,
                 'product_id' => $productId,
             ];
         } catch (\Exception $e) {
@@ -303,10 +345,14 @@ class SubscriptionService
             }
 
             $keyData = json_decode(file_get_contents($serviceAccountKeyPath), true);
+            if (!is_array($keyData) || empty($keyData['client_email']) || empty($keyData['private_key'])) {
+                Log::error('Google service account key is invalid', ['path' => $serviceAccountKeyPath]);
+                return null;
+            }
 
-            $header = base64_encode(json_encode(['alg' => 'RS256', 'typ' => 'JWT']));
+            $header = $this->base64UrlEncode(json_encode(['alg' => 'RS256', 'typ' => 'JWT']));
             $now = time();
-            $claims = base64_encode(json_encode([
+            $claims = $this->base64UrlEncode(json_encode([
                 'iss' => $keyData['client_email'],
                 'scope' => 'https://www.googleapis.com/auth/androidpublisher',
                 'aud' => 'https://oauth2.googleapis.com/token',
@@ -316,9 +362,19 @@ class SubscriptionService
 
             $signatureInput = "{$header}.{$claims}";
             $privateKey = openssl_pkey_get_private($keyData['private_key']);
-            openssl_sign($signatureInput, $signature, $privateKey, OPENSSL_ALGO_SHA256);
+            if (!$privateKey) {
+                Log::error('Failed to load Google service account private key');
+                return null;
+            }
 
-            $jwt = "{$signatureInput}." . base64_encode($signature);
+            if (!openssl_sign($signatureInput, $signature, $privateKey, OPENSSL_ALGO_SHA256)) {
+                openssl_free_key($privateKey);
+                Log::error('Failed to sign Google OAuth JWT');
+                return null;
+            }
+            openssl_free_key($privateKey);
+
+            $jwt = "{$signatureInput}." . $this->base64UrlEncode($signature);
 
             $response = Http::asForm()->post('https://oauth2.googleapis.com/token', [
                 'grant_type' => 'urn:ietf:params:oauth:grant-type:jwt-bearer',
@@ -399,5 +455,10 @@ class SubscriptionService
             ->where('ends_at', '<=', now())
             ->where('auto_renew', false)
             ->update(['status' => 'expired']);
+    }
+
+    private function base64UrlEncode(string $data): string
+    {
+        return rtrim(strtr(base64_encode($data), '+/', '-_'), '=');
     }
 }

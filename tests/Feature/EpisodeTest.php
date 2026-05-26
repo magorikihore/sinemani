@@ -5,6 +5,7 @@ namespace Tests\Feature;
 use App\Models\Category;
 use App\Models\Drama;
 use App\Models\Episode;
+use App\Models\EpisodeSubtitle;
 use App\Models\User;
 use App\Services\CoinService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
@@ -137,5 +138,24 @@ class EpisodeTest extends TestCase
         $response = $this->actingAs($this->user)->deleteJson('/api/v1/watch-history');
 
         $response->assertOk();
+    }
+
+    public function test_locked_episode_hides_subtitles_for_guest(): void
+    {
+        $episode = $this->createEpisode(['is_free' => false]);
+        EpisodeSubtitle::create([
+            'episode_id' => $episode->id,
+            'language' => 'en',
+            'label' => 'English',
+            'file_path' => 'dramas/1/subtitles/ep1-en.vtt',
+            'format' => 'vtt',
+            'sort_order' => 0,
+        ]);
+
+        $response = $this->getJson("/api/v1/episodes/{$episode->id}");
+
+        $response->assertOk()
+            ->assertJsonPath('data.is_unlocked', false)
+            ->assertJsonPath('data.subtitles', []);
     }
 }

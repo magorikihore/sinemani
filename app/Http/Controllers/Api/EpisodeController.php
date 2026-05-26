@@ -38,7 +38,7 @@ class EpisodeController extends Controller
 
         $data = $episode->toArray();
         $data['drama_title'] = $episode->drama->title;
-        $data['subtitles'] = $episode->subtitles->map(fn ($s) => [
+        $subtitlePayload = $episode->subtitles->map(fn ($s) => [
             'language' => $s->language,
             'label' => $s->label ?: strtoupper($s->language),
             'url' => $s->url,
@@ -68,9 +68,11 @@ class EpisodeController extends Controller
                 $data['stream_url'] = $streamPath
                     ? (str_starts_with($streamPath, 'http') ? $streamPath : asset('storage/' . $streamPath))
                     : null;
+                $data['subtitles'] = $subtitlePayload;
             } else {
                 // Don't expose video URLs for locked episodes
                 unset($data['video_url'], $data['video_path'], $data['hls_url']);
+                $data['subtitles'] = [];
             }
         } else {
             $data['is_unlocked'] = $episode->is_free || $episode->drama->is_free;
@@ -79,8 +81,10 @@ class EpisodeController extends Controller
                 $data['stream_url'] = $streamPath
                     ? (str_starts_with($streamPath, 'http') ? $streamPath : asset('storage/' . $streamPath))
                     : null;
+                $data['subtitles'] = $subtitlePayload;
             } else {
                 unset($data['video_url'], $data['video_path'], $data['hls_url']);
+                $data['subtitles'] = [];
             }
         }
 

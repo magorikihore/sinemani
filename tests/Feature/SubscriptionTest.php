@@ -6,6 +6,7 @@ use App\Models\SubscriptionPlan;
 use App\Models\User;
 use App\Services\SubscriptionService;
 use Illuminate\Foundation\Testing\RefreshDatabase;
+use Illuminate\Support\Facades\Http;
 use Tests\TestCase;
 
 class SubscriptionTest extends TestCase
@@ -118,5 +119,44 @@ class SubscriptionTest extends TestCase
 
         $expired = $service->expireOverdueSubscriptions();
         $this->assertEquals(1, $expired);
+    }
+
+    public function test_verify_store_receipt_is_idempotent_for_same_transaction(): void
+    {
+        $plan = $this->createPlan([
+            'store_product_id' => 'com.sinemani.vip.monthly',
+        ]);
+
+        Http::fake([
+            'https://buy.itunes.apple.com/verifyReceipt' => Http::response([
+                'status' => 0,
+                'latest_receipt_info' => [[
+                    'product_id' => $plan->store_product_id,
+                    'transaction_id' => 'apple-tx-123',
+                    'original_transaction_id' => 'apple-original-123',
+                    'expires_date_ms' => (string) now()->addMonth()->valueOf(),
+                ]],
+            ], 200),
+            'https://sandbox.itunes.apple.com/verifyReceipt' => Http::response([], 500),
+        ]);
+
+        $service = app(SubscriptionService::class);
+
+        $first = $service->verifyStoreReceipt(
+            $this->user,
+            'apple',
+            'dummy-receipt',
+            $plan->store_product_id,
+        );
+
+        $second = $service->verifyStoreReceipt(
+            $this->user,
+            'apple',
+            'dummy-receipt',
+            $plan->store_product_id,
+        );
+
+        $this->assertEquals($first->id, $second->id);
+        $this->assertDatabaseCount('subscriptions', 1);
     }
 }

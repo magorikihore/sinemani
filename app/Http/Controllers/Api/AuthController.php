@@ -254,10 +254,10 @@ class AuthController extends Controller
     public function updatePushToken(Request $request): JsonResponse
     {
         $request->validate([
-            'push_token' => ['required', 'string', 'starts_with:ExponentPushToken['],
+            'push_token' => ['required', 'string', 'regex:/^(ExponentPushToken|ExpoPushToken)\[[^\]]+\]$/'],
         ]);
 
-        $request->user()->update(['expo_push_token' => $request->push_token]);
+        $request->user()->update(['expo_push_token' => trim($request->push_token)]);
 
         return $this->success(null, 'Push token registered');
     }
