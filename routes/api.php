@@ -145,6 +145,8 @@ Route::prefix('v1')->middleware(['auth:sanctum', 'active'])->group(function () {
     Route::get('coins/daily-reward/info', [CoinController::class, 'dailyRewardInfo']);
     Route::post('coins/ad-reward', [CoinController::class, 'adReward'])
         ->middleware('throttle:30,1');
+    Route::post('coins/verify-iap', [CoinController::class, 'verifyIap'])
+        ->middleware('throttle:30,1');
 
     // Notifications
     Route::get('notifications', [NotificationController::class, 'index']);

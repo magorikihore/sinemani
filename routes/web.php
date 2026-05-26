@@ -18,6 +18,10 @@ Route::get('/', function () {
     return redirect()->route('admin.login');
 });
 
+// ── Public legal pages (required for Play / App Store) ─────────
+Route::view('/privacy', 'legal.privacy')->name('privacy');
+Route::view('/terms', 'legal.terms')->name('terms');
+
 // ── Admin Auth ─────────────────────────────────────────────────
 Route::prefix('admin')->group(function () {
     Route::get('login', [AdminAuthController::class, 'showLogin'])->name('admin.login');

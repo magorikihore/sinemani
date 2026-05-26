@@ -64,7 +64,7 @@ class DefaultDataSeeder extends Seeder
 
         // ── Default App Settings ───────────────────────────
         $settings = [
-            ['key' => 'app_name', 'value' => 'DramaBox', 'group' => 'general'],
+            ['key' => 'app_name', 'value' => 'Sinemani', 'group' => 'general'],
             ['key' => 'app_version', 'value' => '1.0.0', 'group' => 'general'],
             ['key' => 'maintenance_mode', 'value' => 'false', 'group' => 'general'],
             ['key' => 'signup_bonus_coins', 'value' => '50', 'group' => 'coins'],
@@ -73,9 +73,9 @@ class DefaultDataSeeder extends Seeder
             ['key' => 'vip_weekly_price', 'value' => '7500', 'group' => 'subscription'],
             ['key' => 'vip_monthly_price', 'value' => '25000', 'group' => 'subscription'],
             ['key' => 'vip_yearly_price', 'value' => '200000', 'group' => 'subscription'],
-            ['key' => 'terms_url', 'value' => '', 'group' => 'urls'],
-            ['key' => 'privacy_url', 'value' => '', 'group' => 'urls'],
-            ['key' => 'support_email', 'value' => 'support@dramabox.com', 'group' => 'general'],
+            ['key' => 'terms_url', 'value' => 'https://api.sinemani.net/terms', 'group' => 'urls'],
+            ['key' => 'privacy_url', 'value' => 'https://api.sinemani.net/privacy', 'group' => 'urls'],
+            ['key' => 'support_email', 'value' => 'support@sinemani.net', 'group' => 'general'],
         ];
 
         foreach ($settings as $setting) {

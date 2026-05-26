@@ -39,6 +39,8 @@ return [
         'client_id' => env('GOOGLE_CLIENT_ID'),
         'client_id_ios' => env('GOOGLE_CLIENT_ID_IOS'),
         'client_id_android' => env('GOOGLE_CLIENT_ID_ANDROID'),
+        'play_package_name' => env('GOOGLE_PLAY_PACKAGE_NAME', 'com.sinemani.app'),
+        'play_service_account_key' => env('GOOGLE_PLAY_SERVICE_ACCOUNT_KEY'),
     ],
 
     'facebook' => [
@@ -48,6 +50,7 @@ return [
 
     'apple' => [
         'client_id' => env('APPLE_CLIENT_ID'),
+        'shared_secret' => env('APPLE_IAP_SHARED_SECRET'),
     ],
 
 ];

@@ -6,6 +6,7 @@ use App\Http\Controllers\Controller;
 use App\Models\CoinPackage;
 use App\Services\CoinService;
 use App\Services\DailyRewardService;
+use App\Services\IapVerificationService;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -13,7 +14,8 @@ class CoinController extends Controller
 {
     public function __construct(
         protected CoinService $coinService,
-        protected DailyRewardService $dailyRewardService
+        protected DailyRewardService $dailyRewardService,
+        protected IapVerificationService $iapService,
     ) {}
 
     /**
@@ -110,5 +112,42 @@ class CoinController extends Controller
             'coins_earned' => $adRewardCoins,
             'coin_balance' => $request->user()->fresh()->coin_balance,
         ], 'Ad reward credited');
+    }
+
+    /**
+     * Verify a Google Play / Apple IAP purchase and credit the coins.
+     *
+     * Client should call this AFTER the store reports a successful purchase
+     * and BEFORE consuming/acknowledging the purchase. On a successful
+     * response the client may then consume the product.
+     */
+    public function verifyIap(Request $request): JsonResponse
+    {
+        $data = $request->validate([
+            'provider' => ['required', 'in:google,apple'],
+            'product_id' => ['required', 'string'],
+            'receipt' => ['required', 'string'],
+            'transaction_id' => ['sometimes', 'nullable', 'string'],
+        ]);
+
+        try {
+            $tx = $this->iapService->verifyCoinPurchase(
+                $request->user(),
+                $data['provider'],
+                $data['product_id'],
+                $data['receipt'],
+                $data['transaction_id'] ?? null,
+            );
+        } catch (\RuntimeException $e) {
+            return $this->error($e->getMessage(), 422, null, 'IAP_VERIFICATION_FAILED');
+        } catch (\Throwable $e) {
+            report($e);
+            return $this->error('IAP verification error', 500, null, 'IAP_ERROR');
+        }
+
+        return $this->success([
+            'transaction' => $tx,
+            'coin_balance' => $request->user()->fresh()->coin_balance,
+        ], 'Coins credited');
     }
 }
