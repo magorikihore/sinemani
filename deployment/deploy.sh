@@ -22,6 +22,11 @@ composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
 php artisan migrate --force
 
 # Clear and rebuild caches
+php artisan config:clear
+if ! grep -q '^APP_KEY=base64:' .env; then
+    php artisan key:generate --force
+fi
+export APP_KEY="$(grep ^APP_KEY= .env | cut -d= -f2-)"
 php artisan config:cache
 php artisan route:cache
 php artisan view:cache
@@ -36,6 +41,9 @@ chmod -R 775 storage bootstrap/cache
 
 # Restart queue workers (if running)
 php artisan queue:restart 2>/dev/null || true
+
+# Reload PHP-FPM to pick up config changes
+systemctl reload php8.3-fpm 2>/dev/null || true
 
 # Bring application back up
 php artisan up
