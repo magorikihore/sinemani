@@ -22,6 +22,7 @@ Route::get('/', function () {
 // ── Public legal pages (required for Play / App Store) ─────────
 Route::get('/privacy', [LegalPageController::class, 'privacy'])->name('privacy');
 Route::get('/terms', [LegalPageController::class, 'terms'])->name('terms');
+Route::get('/delete-account', [LegalPageController::class, 'accountDeletion'])->name('account-deletion');
 
 // ── Admin Auth ─────────────────────────────────────────────────
 Route::prefix('admin')->group(function () {

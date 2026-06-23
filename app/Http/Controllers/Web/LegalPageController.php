@@ -12,7 +12,10 @@ class LegalPageController extends Controller
         return view('legal.page', [
             'title' => 'Privacy Policy',
             'content' => LegalContent::privacyPolicy(),
-            'otherLink' => ['url' => route('terms'), 'label' => 'Terms of Service'],
+            'footerLinks' => [
+                ['url' => route('terms'), 'label' => 'Terms of Service'],
+                ['url' => route('account-deletion'), 'label' => 'Account & Data Deletion'],
+            ],
         ]);
     }
 
@@ -21,7 +24,22 @@ class LegalPageController extends Controller
         return view('legal.page', [
             'title' => 'Terms of Service',
             'content' => LegalContent::termsOfService(),
-            'otherLink' => ['url' => route('privacy'), 'label' => 'Privacy Policy'],
+            'footerLinks' => [
+                ['url' => route('privacy'), 'label' => 'Privacy Policy'],
+                ['url' => route('account-deletion'), 'label' => 'Account & Data Deletion'],
+            ],
+        ]);
+    }
+
+    public function accountDeletion()
+    {
+        return view('legal.page', [
+            'title' => 'Account & Data Deletion',
+            'content' => LegalContent::accountDeletion(),
+            'footerLinks' => [
+                ['url' => route('privacy'), 'label' => 'Privacy Policy'],
+                ['url' => route('terms'), 'label' => 'Terms of Service'],
+            ],
         ]);
     }
 }

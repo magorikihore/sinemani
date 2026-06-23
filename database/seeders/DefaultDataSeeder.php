@@ -75,6 +75,7 @@ class DefaultDataSeeder extends Seeder
             ['key' => 'vip_yearly_price', 'value' => '200000', 'group' => 'subscription'],
             ['key' => 'terms_url', 'value' => 'https://api.sinemani.net/terms', 'group' => 'urls'],
             ['key' => 'privacy_url', 'value' => 'https://api.sinemani.net/privacy', 'group' => 'urls'],
+            ['key' => 'account_deletion_url', 'value' => 'https://api.sinemani.net/delete-account', 'group' => 'urls'],
             ['key' => 'support_email', 'value' => 'support@sinemani.net', 'group' => 'general'],
         ];
 

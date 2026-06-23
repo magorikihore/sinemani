@@ -14,6 +14,7 @@ class AdminSettingsController extends Controller
         $settings = AppSetting::whereNotIn('key', [
             LegalContent::PRIVACY_KEY,
             LegalContent::TERMS_KEY,
+            LegalContent::ACCOUNT_DELETION_KEY,
         ])
             ->orderBy('group')
             ->orderBy('key')
@@ -106,6 +107,7 @@ class AdminSettingsController extends Controller
         return view('admin.settings.legal', [
             'privacyContent' => LegalContent::privacyPolicy(),
             'termsContent' => LegalContent::termsOfService(),
+            'accountDeletionContent' => LegalContent::accountDeletion(),
         ]);
     }
 
@@ -114,10 +116,12 @@ class AdminSettingsController extends Controller
         $data = $request->validate([
             'privacy_policy_content' => 'required|string',
             'terms_of_service_content' => 'required|string',
+            'account_deletion_content' => 'required|string',
         ]);
 
         AppSetting::setValue(LegalContent::PRIVACY_KEY, $data['privacy_policy_content'], 'legal');
         AppSetting::setValue(LegalContent::TERMS_KEY, $data['terms_of_service_content'], 'legal');
+        AppSetting::setValue(LegalContent::ACCOUNT_DELETION_KEY, $data['account_deletion_content'], 'legal');
 
         return back()->with('success', 'Legal pages updated successfully.');
     }

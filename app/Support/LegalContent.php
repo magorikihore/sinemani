@@ -10,6 +10,8 @@ class LegalContent
 
     public const TERMS_KEY = 'terms_of_service_content';
 
+    public const ACCOUNT_DELETION_KEY = 'account_deletion_content';
+
     public static function privacyPolicy(): string
     {
         return AppSetting::getValue(self::PRIVACY_KEY) ?: self::defaultPrivacyPolicy();
@@ -18,6 +20,11 @@ class LegalContent
     public static function termsOfService(): string
     {
         return AppSetting::getValue(self::TERMS_KEY) ?: self::defaultTermsOfService();
+    }
+
+    public static function accountDeletion(): string
+    {
+        return AppSetting::getValue(self::ACCOUNT_DELETION_KEY) ?: self::defaultAccountDeletion();
     }
 
     public static function defaultPrivacyPolicy(): string
@@ -102,6 +109,47 @@ HTML;
 
 <h2>8. Contact</h2>
 <p><a href="mailto:{$contact}">{$contact}</a></p>
+HTML;
+    }
+
+    public static function defaultAccountDeletion(): string
+    {
+        $appName = config('app.name', 'Sinemani');
+        $contact = AppSetting::getValue('support_email', 'support@sinemani.net');
+
+        return <<<HTML
+<p>You can request deletion of your {$appName} account and associated personal data using either method below.</p>
+
+<h2>Delete in the app</h2>
+<ol>
+    <li>Open the {$appName} app and sign in.</li>
+    <li>Go to <strong>Profile → Settings</strong>.</li>
+    <li>Tap <strong>Delete Account</strong> and confirm.</li>
+</ol>
+<p>Your account will be deactivated immediately and personal data will be removed from our active systems within 30 days.</p>
+
+<h2>Request by email</h2>
+<p>If you cannot access the app, email us at <a href="mailto:{$contact}?subject=Account%20Deletion%20Request">{$contact}</a> with:</p>
+<ul>
+    <li>Subject line: <strong>Account Deletion Request</strong></li>
+    <li>The email address or phone number linked to your account</li>
+    <li>Your display name (if known)</li>
+</ul>
+<p>We will verify your identity and process the request within 30 days.</p>
+
+<h2>Data that is deleted</h2>
+<ul>
+    <li>Account profile (name, email, phone, profile picture)</li>
+    <li>Watch history, watchlist, likes, comments, and ratings</li>
+    <li>Coin balance and unlock history (non-refundable)</li>
+    <li>Push notification tokens and device identifiers</li>
+</ul>
+
+<h2>Data we may retain</h2>
+<p>We may keep limited records where required by law or for fraud prevention, such as payment transaction references and subscription purchase records. These are retained only as long as legally required and are not used for marketing.</p>
+
+<h2>Questions</h2>
+<p>Contact <a href="mailto:{$contact}">{$contact}</a> or see our <a href="/privacy">Privacy Policy</a>.</p>
 HTML;
     }
 }

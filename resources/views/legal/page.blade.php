@@ -24,6 +24,12 @@
         {!! $content !!}
     </div>
 
-    <p><a href="{{ $otherLink['url'] }}">{{ $otherLink['label'] }}</a></p>
+    @if(!empty($footerLinks))
+        <p>
+            @foreach($footerLinks as $link)
+                <a href="{{ $link['url'] }}">{{ $link['label'] }}</a>@if(!$loop->last) · @endif
+            @endforeach
+        </p>
+    @endif
 </body>
 </html>
