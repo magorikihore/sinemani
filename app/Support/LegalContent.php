@@ -12,6 +12,8 @@ class LegalContent
 
     public const ACCOUNT_DELETION_KEY = 'account_deletion_content';
 
+    public const DATA_DELETION_KEY = 'data_deletion_content';
+
     public static function privacyPolicy(): string
     {
         return AppSetting::getValue(self::PRIVACY_KEY) ?: self::defaultPrivacyPolicy();
@@ -25,6 +27,11 @@ class LegalContent
     public static function accountDeletion(): string
     {
         return AppSetting::getValue(self::ACCOUNT_DELETION_KEY) ?: self::defaultAccountDeletion();
+    }
+
+    public static function dataDeletion(): string
+    {
+        return AppSetting::getValue(self::DATA_DELETION_KEY) ?: self::defaultDataDeletion();
     }
 
     public static function defaultPrivacyPolicy(): string
@@ -147,6 +154,46 @@ HTML;
 
 <h2>Data we may retain</h2>
 <p>We may keep limited records where required by law or for fraud prevention, such as payment transaction references and subscription purchase records. These are retained only as long as legally required and are not used for marketing.</p>
+
+<h2>Questions</h2>
+<p>Contact <a href="mailto:{$contact}">{$contact}</a> or see our <a href="/privacy">Privacy Policy</a>.</p>
+HTML;
+    }
+
+    public static function defaultDataDeletion(): string
+    {
+        $appName = config('app.name', 'Sinemani');
+        $contact = AppSetting::getValue('support_email', 'support@sinemani.net');
+
+        return <<<HTML
+<p>You can request deletion of your personal data stored by {$appName} without deleting your account, or delete all data by closing your account.</p>
+
+<h2>Delete data in the app</h2>
+<ul>
+    <li><strong>Watch history</strong> — Profile → Watch History → Clear All</li>
+    <li><strong>Comments</strong> — Delete your own comments from any episode screen</li>
+    <li><strong>Watchlist</strong> — Remove items from your watchlist</li>
+</ul>
+
+<h2>Request data deletion by email</h2>
+<p>Email <a href="mailto:{$contact}?subject=Data%20Deletion%20Request">{$contact}</a> with:</p>
+<ul>
+    <li>Subject line: <strong>Data Deletion Request</strong></li>
+    <li>The email address or phone number linked to your account</li>
+    <li>Which data you want deleted (e.g. watch history, comments, profile photo)</li>
+</ul>
+<p>We will verify your identity and process the request within 30 days.</p>
+
+<h2>Data types you can request to delete</h2>
+<ul>
+    <li>Profile information (display name, profile picture)</li>
+    <li>Watch history and continue-watching data</li>
+    <li>Comments, ratings, likes, and watchlist entries</li>
+    <li>Push notification tokens</li>
+</ul>
+
+<h2>Delete your entire account</h2>
+<p>To delete your account and all associated data, use our <a href="/delete-account">Account &amp; Data Deletion</a> page.</p>
 
 <h2>Questions</h2>
 <p>Contact <a href="mailto:{$contact}">{$contact}</a> or see our <a href="/privacy">Privacy Policy</a>.</p>

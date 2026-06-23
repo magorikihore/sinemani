@@ -76,6 +76,7 @@ class DefaultDataSeeder extends Seeder
             ['key' => 'terms_url', 'value' => 'https://api.sinemani.net/terms', 'group' => 'urls'],
             ['key' => 'privacy_url', 'value' => 'https://api.sinemani.net/privacy', 'group' => 'urls'],
             ['key' => 'account_deletion_url', 'value' => 'https://api.sinemani.net/delete-account', 'group' => 'urls'],
+            ['key' => 'data_deletion_url', 'value' => 'https://api.sinemani.net/delete-data', 'group' => 'urls'],
             ['key' => 'support_email', 'value' => 'support@sinemani.net', 'group' => 'general'],
         ];
 

@@ -23,6 +23,7 @@ use App\Http\Controllers\Admin\ReportManagementController;
 use App\Http\Controllers\Api\SubscriptionController;
 use App\Http\Controllers\Api\PaymentController;
 use App\Http\Controllers\Api\PromotionController;
+use App\Http\Controllers\Api\LegalController;
 
 /*
 |--------------------------------------------------------------------------
@@ -78,6 +79,9 @@ Route::prefix('v1')->group(function () {
 
     // Ratings (read only)
     Route::get('dramas/{drama}/ratings', [RatingController::class, 'index']);
+
+    // Legal URLs (privacy, terms, deletion — for app & store listings)
+    Route::get('legal-urls', [LegalController::class, 'urls']);
 });
 
 // ── Authenticated User Routes ──────────────────────────────────────
