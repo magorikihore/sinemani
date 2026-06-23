@@ -21,13 +21,8 @@ composer install --no-dev --no-interaction --prefer-dist --optimize-autoloader
 # Run database migrations
 php artisan migrate --force
 
-# Clear and rebuild caches
+# Clear and rebuild caches (skip config:cache — APP_KEY from .env is read at runtime)
 php artisan config:clear
-if ! grep -q '^APP_KEY=base64:' .env; then
-    php artisan key:generate --force
-fi
-export APP_KEY="$(grep ^APP_KEY= .env | cut -d= -f2-)"
-php artisan config:cache
 php artisan route:cache
 php artisan view:cache
 php artisan event:cache
