@@ -4,13 +4,21 @@ namespace App\Http\Controllers\Web;
 
 use App\Http\Controllers\Controller;
 use App\Models\AppSetting;
+use App\Support\LegalContent;
 use Illuminate\Http\Request;
 
 class AdminSettingsController extends Controller
 {
     public function index()
     {
-        $settings = AppSetting::orderBy('group')->orderBy('key')->get()->groupBy('group');
+        $settings = AppSetting::whereNotIn('key', [
+            LegalContent::PRIVACY_KEY,
+            LegalContent::TERMS_KEY,
+        ])
+            ->orderBy('group')
+            ->orderBy('key')
+            ->get()
+            ->groupBy('group');
 
         return view('admin.settings.index', compact('settings'));
     }
@@ -91,5 +99,26 @@ class AdminSettingsController extends Controller
         }
 
         return back()->with('success', 'Payment gateway settings updated.');
+    }
+
+    public function legalPages()
+    {
+        return view('admin.settings.legal', [
+            'privacyContent' => LegalContent::privacyPolicy(),
+            'termsContent' => LegalContent::termsOfService(),
+        ]);
+    }
+
+    public function updateLegalPages(Request $request)
+    {
+        $data = $request->validate([
+            'privacy_policy_content' => 'required|string',
+            'terms_of_service_content' => 'required|string',
+        ]);
+
+        AppSetting::setValue(LegalContent::PRIVACY_KEY, $data['privacy_policy_content'], 'legal');
+        AppSetting::setValue(LegalContent::TERMS_KEY, $data['terms_of_service_content'], 'legal');
+
+        return back()->with('success', 'Legal pages updated successfully.');
     }
 }

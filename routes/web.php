@@ -13,14 +13,15 @@ use App\Http\Controllers\Web\AdminSettingsController;
 use App\Http\Controllers\Web\AdminSubscriptionController;
 use App\Http\Controllers\Web\AdminCoinPackageController;
 use App\Http\Controllers\Web\AdminBannerController;
+use App\Http\Controllers\Web\LegalPageController;
 
 Route::get('/', function () {
     return redirect()->route('admin.login');
 });
 
 // ── Public legal pages (required for Play / App Store) ─────────
-Route::view('/privacy', 'legal.privacy')->name('privacy');
-Route::view('/terms', 'legal.terms')->name('terms');
+Route::get('/privacy', [LegalPageController::class, 'privacy'])->name('privacy');
+Route::get('/terms', [LegalPageController::class, 'terms'])->name('terms');
 
 // ── Admin Auth ─────────────────────────────────────────────────
 Route::prefix('admin')->group(function () {
@@ -102,4 +103,6 @@ Route::prefix('admin')->middleware(['web', \App\Http\Middleware\AdminWebMiddlewa
     Route::post('settings', [AdminSettingsController::class, 'store'])->name('admin.settings.store');
     Route::get('settings/payment', [AdminSettingsController::class, 'paymentGateway'])->name('admin.settings.payment');
     Route::put('settings/payment', [AdminSettingsController::class, 'updatePaymentGateway'])->name('admin.settings.payment.update');
+    Route::get('settings/legal', [AdminSettingsController::class, 'legalPages'])->name('admin.settings.legal');
+    Route::put('settings/legal', [AdminSettingsController::class, 'updateLegalPages'])->name('admin.settings.legal.update');
 });
