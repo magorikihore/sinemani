@@ -7,6 +7,7 @@ use App\Http\Requests\UpdateWatchProgressRequest;
 use App\Models\Episode;
 use App\Models\WatchHistory;
 use App\Services\EpisodeUnlockService;
+use App\Support\SecureUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 
@@ -65,9 +66,7 @@ class EpisodeController extends Controller
             // If unlocked, provide streaming URL
             if ($isUnlocked) {
                 $streamPath = $episode->hls_url ?? $episode->video_url;
-                $data['stream_url'] = $streamPath
-                    ? (str_starts_with($streamPath, 'http') ? $streamPath : asset('storage/' . $streamPath))
-                    : null;
+                $data['stream_url'] = SecureUrl::media($streamPath);
                 $data['subtitles'] = $subtitlePayload;
             } else {
                 // Don't expose video URLs for locked episodes
@@ -78,9 +77,7 @@ class EpisodeController extends Controller
             $data['is_unlocked'] = $episode->is_free || $episode->drama->is_free;
             if ($data['is_unlocked']) {
                 $streamPath = $episode->hls_url ?? $episode->video_url;
-                $data['stream_url'] = $streamPath
-                    ? (str_starts_with($streamPath, 'http') ? $streamPath : asset('storage/' . $streamPath))
-                    : null;
+                $data['stream_url'] = SecureUrl::media($streamPath);
                 $data['subtitles'] = $subtitlePayload;
             } else {
                 unset($data['video_url'], $data['video_path'], $data['hls_url']);
@@ -104,10 +101,7 @@ class EpisodeController extends Controller
         try {
             $unlock = $this->unlockService->unlock($user, $episode);
 
-            $streamPath = $episode->hls_url ?? $episode->video_url;
-            $streamUrl = $streamPath
-                ? (str_starts_with($streamPath, 'http') ? $streamPath : asset('storage/' . $streamPath))
-                : null;
+            $streamUrl = SecureUrl::media($episode->hls_url ?? $episode->video_url);
 
             return $this->success([
                 'unlock' => $unlock,

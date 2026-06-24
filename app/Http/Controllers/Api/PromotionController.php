@@ -5,6 +5,7 @@ namespace App\Http\Controllers\Api;
 use App\Http\Controllers\Controller;
 use App\Models\Promotion;
 use App\Services\PushNotificationService;
+use App\Support\SecureUrl;
 use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Storage;
@@ -26,7 +27,7 @@ class PromotionController extends Controller
         }
 
         if ($promotion->image) {
-            $promotion->image = asset('storage/' . $promotion->image);
+            $promotion->image = SecureUrl::media($promotion->image);
         }
 
         return $this->success([
