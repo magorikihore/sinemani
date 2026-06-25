@@ -88,6 +88,7 @@ Route::prefix('v1')->group(function () {
 Route::prefix('v1')->middleware(['auth:sanctum', 'active'])->group(function () {
     // Auth
     Route::post('auth/logout', [AuthController::class, 'logout']);
+    Route::post('auth/convert-guest', [AuthController::class, 'convertGuest']);
     Route::get('auth/me', [AuthController::class, 'me']);
     Route::put('auth/fcm-token', [AuthController::class, 'updateFcmToken']);
     Route::put('auth/push-token', [AuthController::class, 'updatePushToken']);

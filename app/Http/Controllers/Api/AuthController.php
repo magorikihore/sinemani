@@ -12,6 +12,7 @@ use Illuminate\Http\JsonResponse;
 use Illuminate\Http\Request;
 use Illuminate\Support\Facades\Hash;
 use Illuminate\Support\Facades\Log;
+use Illuminate\Validation\Rule;
 use Illuminate\Validation\ValidationException;
 
 class AuthController extends Controller
@@ -149,6 +150,50 @@ class AuthController extends Controller
             'user' => $this->formatUser($user),
             'token' => $token,
         ], 'Login successful');
+    }
+
+    /**
+     * Upgrade a guest account to a full registered account.
+     */
+    public function convertGuest(Request $request): JsonResponse
+    {
+        $user = $request->user();
+
+        if (!preg_match('/^guest_[a-zA-Z0-9]+@sinemani\.app$/', $user->email)) {
+            return $this->error('Only guest accounts can be converted.', 422);
+        }
+
+        $validated = $request->validate([
+            'name' => ['required', 'string', 'max:255'],
+            'email' => ['required', 'email', 'max:255', Rule::unique('users', 'email')->ignore($user->id)],
+            'password' => ['required', 'string', 'min:8', 'confirmed'],
+            'phone' => ['nullable', 'string', 'max:20', Rule::unique('users', 'phone')->ignore($user->id)],
+        ]);
+
+        $user->update([
+            'name' => $validated['name'],
+            'email' => $validated['email'],
+            'password' => $validated['password'],
+            'phone' => $validated['phone'] ?? $user->phone,
+        ]);
+
+        $bonusCoins = 0;
+        $convertBonus = (int) config('dramabox.guest_convert_bonus_coins', 0);
+        if ($convertBonus > 0) {
+            $this->coinService->credit($user, $convertBonus, 'guest_convert', 'Thanks for signing up!');
+            $user->refresh();
+            $bonusCoins = $convertBonus;
+        }
+
+        $user->update(['last_login_at' => now()]);
+        $user->tokens()->delete();
+        $token = $user->createToken($request->input('device_name', 'mobile'))->plainTextToken;
+
+        return $this->success([
+            'user' => $this->formatUser($user),
+            'token' => $token,
+            'bonus_coins' => $bonusCoins,
+        ], 'Account created successfully');
     }
 
     /**
